@@ -1,6 +1,6 @@
 {
   "name": "@aux4/test",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Test aux4",
   "main": "index.js",
   "preferGlobal": true,
@@ -35,7 +35,7 @@
   },
   "jest": {
     "testPathIgnorePatterns": [],
-    "haste" : {
+    "haste": {
       "retainAllFiles": true
     }
   }
