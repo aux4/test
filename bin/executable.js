@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 const { Engine } = require("@aux4/engine");
+const TestCommand = require("./command/TestExecutor");
 
-process.title = "aux4-template";
+process.title = "aux4-test";
 
 const config = {
   profiles: [
@@ -10,10 +11,10 @@ const config = {
       name: "main",
       commands: [
         {
-          name: "",
-          execute: [],
+          name: "test",
+          execute: TestCommand.execute,
           help: {
-            text: ""
+            text: "<files> run test"
           }
         }
       ]
