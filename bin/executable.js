@@ -11,10 +11,17 @@ const config = {
       name: "main",
       commands: [
         {
-          name: "test",
-          execute: TestCommand.execute,
+          name: "run",
+          execute: TestCommand.run,
           help: {
             text: "<files> run test"
+          }
+        },
+        {
+          name: "coverage",
+          execute: TestCommand.coverage,
+          help: {
+            text: "<files> run test with coverage"
           }
         }
       ]
