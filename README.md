@@ -6,7 +6,7 @@ Test aux4
 ## Install
 
 ```bash
-npm install -g @aux4/test
+npm install --save-dev @aux4/test
 ```
 
 ## Usage
