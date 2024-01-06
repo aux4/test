@@ -1,6 +1,6 @@
 {
   "name": "@aux4/test",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Test aux4",
   "main": "index.js",
   "preferGlobal": true,
