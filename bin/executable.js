@@ -2,6 +2,7 @@
 
 const { Engine } = require("@aux4/engine");
 const TestCommand = require("./command/TestExecutor");
+const TestEditor = require("./command/TestEditor");
 
 process.title = "aux4-test";
 
@@ -22,6 +23,34 @@ const config = {
           execute: TestCommand.coverage,
           help: {
             text: "<files> run test with coverage"
+          }
+        },
+        {
+          name: "add",
+          execute: TestEditor.addTest,
+          help: {
+            text: "<testFile> add test to test suite",
+            variables: [
+              {
+                name: "testFile",
+                text: "test suite file",
+                arg: true
+              },
+              {
+                name: "name",
+                text: "test name",
+              },
+              {
+                name: "file",
+                text: "file to add",
+                default: ""
+              },
+              {
+                name: "execute",
+                text: "command to execute",
+                default: ""
+              }
+            ]
           }
         }
       ]
