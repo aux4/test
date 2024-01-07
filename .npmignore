@@ -1,6 +1,5 @@
 .idea/
 node_modules/
-test/
 coverage/
 .aux4
 .prettierrc.json
