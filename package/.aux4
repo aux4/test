@@ -1,7 +1,7 @@
 {
   "scope": "aux4",
   "name": "test",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "aux4 testing tool",
   "license": "Apache-2.0",
   "git": "https://github.com/aux4/test",
