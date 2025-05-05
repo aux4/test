@@ -4,39 +4,39 @@
       "name": "main",
       "commands": [
         {
-          "name": "ship",
+          "name": "install",
           "execute": [
-            "git pull -r",
-            "npm test",
-            "git push"
+            "npm install",
+            "npx vite build",
+            "npm install colors strip-color --prefix package/test",
+            "alias:aux4 aux4 releaser increment-version --dir package",
+            "set:version=!aux4 aux4 releaser get-version --dir package",
+            "cd package && aux4 aux4 pkger build .",
+            "aux4 aux4 pkger uninstall aux4/test",
+            "aux4 aux4 pkger install --fromFile package/aux4_test_${version}.zip"
           ],
           "help": {
-            "text": "🚢 pull test and push the code"
+            "text": "Install aux4/test locally"
           }
         },
         {
           "name": "release",
           "execute": [
-            "npm version ${version}",
-            "json:cat package.json",
-            "set:versionNumber=${response.version}",
-            "npm publish --access public --otp=${otp}",
+            "git pull -r",
+            "npm install",
+            "npx vite build",
+            "npm install colors strip-color --prefix package/test",
+            "alias:aux4 aux4 releaser increment-version --dir package",
+            "set:version=!aux4 aux4 releaser get-version --dir package",
+            "cd package && aux4 aux4 pkger build .",
+            "aux4 aux4 pkger uninstall aux4/test",
+            "aux4 aux4 pkger publish package/aux4_test_${version}.zip",
+            "git tag -a v${version} -m 'Release ${version}'",
             "git push --follow-tags",
-            "echo ${versionNumber} released successfully"
+            "echo ${version} released successfully"
           ],
           "help": {
-            "text": "release new version of @aux4/test",
-            "variables": [
-              {
-                "name": "version",
-                "text": "type of version release. e.g.: major, minor, patch",
-                "default": "patch"
-              },
-              {
-                "name": "otp",
-                "text": "npm one time password"
-              }
-            ]
+            "text": "Release new version of aux4/test"
           }
         }
       ]

@@ -1,0 +1,97 @@
+{
+  "scope": "aux4",
+  "name": "test",
+  "version": "0.0.5",
+  "description": "aux4 testing tool",
+  "license": "Apache-2.0",
+  "git": "https://github.com/aux4/test",
+  "tags": [
+    "aux4",
+    "test",
+    "testing"
+  ],
+  "system": [
+    [
+      "test:node --version",
+      "brew:node",
+      "apt:nodejs"
+    ],
+    [
+      "test:jest --version",
+      "npm:jest"
+    ]
+  ],
+  "profiles": [
+    {
+      "name": "main",
+      "commands": [
+        {
+          "name": "test",
+          "execute": [
+            "profile:test"
+          ],
+          "help": {
+            "text": "Manage aux4 tests"
+          }
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "commands": [
+        {
+          "name": "run",
+          "execute": [
+            "node ${packageDir}/lib/aux4-test.js run ${packageDir} ${dir}"
+          ],
+          "help": {
+            "text": "Run aux4 tests",
+            "variables": [
+              {
+                "name": "dir",
+                "text": "The directory to run the tests in",
+                "default": ".",
+                "arg": true
+              }
+            ]
+          }
+        },
+        {
+          "name": "add",
+          "execute": [
+            "node ${packageDir}/lib/aux4-test.js add values(testFile, level, name, file*, execute)"
+          ],
+          "help": {
+            "text": "Add a test to the test file",
+            "variables": [
+              {
+                "name": "testFile",
+                "text": "The test file to add the test to",
+                "arg": true
+              },
+              {
+                "name": "level",
+                "text": "The level of the test (markdown title level)",
+                "default": "2"
+              },
+              {
+                "name": "name",
+                "text": "The name of the test"
+              },
+              {
+                "name": "file",
+                "text": "The file to be included in the test",
+                "default": "",
+                "multiple": true
+              },
+              {
+                "name": "execute",
+                "text": "The command line to execute in the test"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

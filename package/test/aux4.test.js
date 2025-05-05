@@ -1,9 +1,7 @@
 const colors = require("colors");
 const fs = require("fs");
-const stripColor = require("strip-color");
-const { Command, Output } = require("@aux4/engine");
-const MarkdownTestParser = require("../MarkdownTestParser");
-const { executeCommand } = require("../TestUtils");
+const MarkdownTestParser = require("./MarkdownTestParser");
+const { executeCommand } = require("./TestUtils");
 
 const files = process.env.AUX4_TEST_FILES || "";
 
@@ -19,15 +17,13 @@ files.split(",").forEach(file => {
 });
 
 function createScenario(index, scenario, directory, prefix = "") {
-  const coveragePath = process.env.AUX4_TEST_COVERAGE_PATH;
-
   describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
     (scenario.files || []).forEach(file => {
       beforeEach(() => {
         try {
           fs.writeFileSync(`${directory}/${file.name}`, file.content);
         } catch (e) {
-          Output.println(`Cannot write file ${directory}/${file.name}`.red);
+          console.log(`Cannot write file ${directory}/${file.name}`.red);
         }
       });
 
@@ -44,13 +40,13 @@ function createScenario(index, scenario, directory, prefix = "") {
     ].forEach(({ list, method }) => {
       list.forEach(cmd => {
         method(async () => {
-          const { stdout, stderr } = await Command.execute(cmd, undefined, { cwd: directory });
+          const { stdout, stderr } = await executeCommand(cmd, directory);
           if (stderr) {
-            Output.println(stderr.red);
+            console.log(stderr.red);
           }
 
           if (stdout) {
-            Output.println(stdout);
+            console.log(stdout);
           }
         });
       });
@@ -58,10 +54,7 @@ function createScenario(index, scenario, directory, prefix = "") {
 
     (scenario.tests || []).forEach((test, index) => {
       it(`${test.title || `${index + 1}. should print output`}`, async () => {
-        const nyc = `nyc --temp-dir '${coveragePath}' --no-clean --reporter none`;
-        const cmd = coveragePath ? `${nyc} ${test.execute.replaceAll("| node ", `| ${nyc} node `)}` : test.execute;
-
-        const { stdout, stderr } = await executeCommand(cmd, directory);
+        const { stdout, stderr } = await executeCommand(test.execute, directory);
 
         if (test.expect) {
           expect(stdout).toEqual(test.expect);
