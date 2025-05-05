@@ -31,6 +31,8 @@
             "cd package && aux4 aux4 pkger build .",
             "aux4 aux4 pkger uninstall aux4/test",
             "aux4 aux4 pkger publish package/aux4_test_${version}.zip",
+            "git add package/.aux4",
+            "git commit -m 'Update aux4/test to version ${version}'",
             "git tag -a v${version} -m 'Release ${version}'",
             "git push --follow-tags",
             "echo ${version} released successfully"
