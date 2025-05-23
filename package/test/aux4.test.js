@@ -57,11 +57,11 @@ function createScenario(index, scenario, directory, prefix = "") {
         const { stdout, stderr } = await executeCommand(test.execute, directory);
 
         if (test.expect) {
-          expect(stdout).toEqual(test.expect);
+          expect(test.expect).toEqual(stdout);
         }
 
         if (test.error) {
-          expect(stderr).toEqual(test.error);
+          expect(test.error).toEqual(stderr);
         }
       });
     });

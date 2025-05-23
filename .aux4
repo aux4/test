@@ -4,6 +4,17 @@
       "name": "main",
       "commands": [
         {
+          "name": "build",
+          "execute": [
+            "npm install",
+            "npx vite build",
+            "npm install colors strip-color --prefix package/test"
+          ],
+          "help": {
+            "text": "Build aux4/test"
+          }
+        },
+        {
           "name": "install",
           "execute": [
             "npm install",
