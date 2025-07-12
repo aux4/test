@@ -8,8 +8,9 @@ process.title = "aux4-test";
 (async () => {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    console.error("No action specified. Available actions: run, coverage, add");
-    process.exit(1);
+    console.log("       run   <files> run test");
+    console.log("  coverage   <files> run test with coverage");
+    process.exit(0);
   }
 
   const action = args[0];

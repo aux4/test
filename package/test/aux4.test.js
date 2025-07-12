@@ -57,7 +57,20 @@ function createScenario(index, scenario, directory, prefix = "") {
         const { stdout, stderr } = await executeCommand(test.execute, directory);
 
         if (test.expect) {
-          expect(test.expect).toEqual(stdout);
+          let expectedValue = test.expect;
+          let actualValue = stdout;
+
+          // Apply modifiers for comparison
+          if (test.expectIgnoreCase) {
+            expectedValue = expectedValue.toLowerCase();
+            actualValue = actualValue.toLowerCase();
+          }
+
+          if (test.expectPartial) {
+            expect(actualValue).toContain(expectedValue);
+          } else {
+            expect(actualValue).toEqual(expectedValue);
+          }
         }
 
         if (test.error) {

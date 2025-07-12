@@ -9,7 +9,7 @@ const AFTER_EACH_REGEX = /^```afterEach\n(?<cmd>.+?)\n```$/gms;
 const BEFORE_ALL_REGEX = /^```beforeAll\n(?<cmd>.+?)\n```$/gms;
 const AFTER_ALL_REGEX = /^```afterAll\n(?<cmd>.+?)\n```$/gms;
 const TEST_REGEX =
-  /(^-\s(?<title>[^\n]+)\s+)?```execute\s(?<execute>.+?)\n```(\s+```expect\s*\n(?<expect>.+?)\s```)?(\s+```error\s*\n(?<error>.+?)\n```)?/gms;
+  /(^-\s(?<title>[^\n]+)\s+)?```execute\s(?<execute>.+?)\n```(\s+```expect(?<expectModifiers>:[^`\s]*)*\s*\n(?<expect>.+?)\s```)?(\s+```error\s*\n(?<error>.+?)\n```)?/gms;
 
 class MarkdownTestParser {
   static parse(file) {
@@ -130,6 +130,13 @@ function parseTests(scenario) {
       expect: match.groups.expect ? match.groups.expect : undefined,
       error: match.groups.error ? match.groups.error : undefined
     };
+
+    // Parse expect modifiers
+    if (match.groups.expectModifiers) {
+      const modifiers = match.groups.expectModifiers.split(':').filter(m => m.length > 0);
+      test.expectIgnoreCase = modifiers.includes('ignoreCase');
+      test.expectPartial = modifiers.includes('partial');
+    }
 
     scenario.tests.push(test);
   }
