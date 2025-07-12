@@ -57,18 +57,24 @@ function createScenario(index, scenario, directory, prefix = "") {
         const { stdout, stderr } = await executeCommand(test.execute, directory);
 
         if (test.expect) {
-          let expectedValue = test.expect;
-          let actualValue = stdout;
+          const expectedValue = test.expect;
+          const actualValue = stdout;
 
-          // Apply modifiers for comparison
-          if (test.expectIgnoreCase) {
-            expectedValue = expectedValue.toLowerCase();
-            actualValue = actualValue.toLowerCase();
-          }
-
-          if (test.expectPartial) {
+          if (test.expectPartial && test.expectIgnoreCase) {
+            // Combined: partial + ignore case using regex
+            const escapedExpected = expectedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp(escapedExpected, 'i');
+            expect(actualValue).toMatch(pattern);
+          } else if (test.expectPartial) {
+            // Partial matching only
             expect(actualValue).toContain(expectedValue);
+          } else if (test.expectIgnoreCase) {
+            // Case-insensitive exact matching using regex
+            const escapedExpected = expectedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp(`^${escapedExpected}$`, 'i');
+            expect(actualValue).toMatch(pattern);
           } else {
+            // Exact matching (default behavior)
             expect(actualValue).toEqual(expectedValue);
           }
         }
