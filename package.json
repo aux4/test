@@ -33,6 +33,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^24.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "jest": "^30.0.4",
     "rollup-plugin-preserve-shebang": "^1.0.1",
     "vite": "^6.3.3"
   }
