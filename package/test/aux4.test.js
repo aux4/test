@@ -60,16 +60,24 @@ function createScenario(index, scenario, directory, prefix = "") {
           let expectedValue = test.expect;
           let actualValue = stdout;
 
-          // Apply modifiers for comparison
-          if (test.expectIgnoreCase) {
-            expectedValue = expectedValue.toLowerCase();
-            actualValue = actualValue.toLowerCase();
-          }
-
-          if (test.expectPartial) {
-            expect(actualValue).toContain(expectedValue);
+          if (test.expectRegex) {
+            let flags = '';
+            if (test.expectIgnoreCase) {
+              flags += 'i';
+            }
+            const regex = new RegExp(expectedValue, flags);
+            expect(actualValue).toMatch(regex);
           } else {
-            expect(actualValue).toEqual(expectedValue);
+            if (test.expectIgnoreCase) {
+              expectedValue = expectedValue.toLowerCase();
+              actualValue = actualValue.toLowerCase();
+            }
+
+            if (test.expectPartial) {
+              expect(actualValue).toContain(expectedValue);
+            } else {
+              expect(actualValue).toEqual(expectedValue);
+            }
           }
         }
 

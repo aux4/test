@@ -136,6 +136,7 @@ function parseTests(scenario) {
       const modifiers = match.groups.expectModifiers.split(':').filter(m => m.length > 0);
       test.expectIgnoreCase = modifiers.includes('ignoreCase');
       test.expectPartial = modifiers.includes('partial');
+      test.expectRegex = modifiers.includes('regex');
     }
 
     scenario.tests.push(test);
