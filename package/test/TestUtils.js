@@ -21,9 +21,7 @@ function runCliCommand(command, options = {}) {
       { maxBuffer: Infinity, ...options, env: { ...process.env } },
       (err, stdout, stderr) => {
         if (err) {
-          reject(
-            new ExecutorError(err.message, err, out.exitCode, stdout, stderr)
-          );
+          reject(new ExecutorError(err.message, err, out.exitCode, stdout, stderr));
         } else {
           resolve({ exitCode: out.exitCode, stdout, stderr });
         }
@@ -62,7 +60,6 @@ async function executeCommand(command, directory) {
     stdout = result.stdout;
     stderr = result.stderr;
   } catch (err) {
-    console.log("Error executing command:", command, directory, err);
     if (err instanceof ExecutorError) {
       exitCode = err.exitCode;
       stdout = err.stdout;

@@ -17,6 +17,7 @@
         {
           "name": "install",
           "execute": [
+            "rm -f package/*.zip",
             "npm install",
             "npx vite build",
             "npm install colors strip-color --prefix package/test",

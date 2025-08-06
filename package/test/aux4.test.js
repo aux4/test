@@ -54,35 +54,64 @@ function createScenario(index, scenario, directory, prefix = "") {
 
     (scenario.tests || []).forEach((test, index) => {
       it(`${test.title || `${index + 1}. should print output`}`, async () => {
-        const { stdout, stderr } = await executeCommand(test.execute, directory);
+        const { stdout, stderr, exitCode } = await executeCommand(test.execute, directory);
 
-        if (test.expect) {
-          let expectedValue = test.expect;
-          let actualValue = stdout;
+        if (test.expects && test.expects.length > 0) {
+          test.expects.forEach(expectObj => {
+            let expectedValue = expectObj.expect;
+            let actualValue = stdout;
 
-          if (test.expectRegex) {
-            let flags = '';
-            if (test.expectIgnoreCase) {
-              flags += 'i';
-            }
-            const regex = new RegExp(expectedValue, flags);
-            expect(actualValue).toMatch(regex);
-          } else {
-            if (test.expectIgnoreCase) {
-              expectedValue = expectedValue.toLowerCase();
-              actualValue = actualValue.toLowerCase();
-            }
-
-            if (test.expectPartial) {
-              expect(actualValue).toContain(expectedValue);
+            if (expectObj.expectRegex) {
+              let flags = "";
+              if (expectObj.expectIgnoreCase) {
+                flags += "i";
+              }
+              const regex = new RegExp(expectedValue, flags);
+              expect(actualValue).toMatch(regex);
             } else {
-              expect(actualValue).toEqual(expectedValue);
+              if (expectObj.expectIgnoreCase) {
+                expectedValue = expectedValue.toLowerCase();
+                actualValue = actualValue.toLowerCase();
+              }
+
+              if (expectObj.expectPartial) {
+                expect(actualValue).toContain(expectedValue);
+              } else {
+                expect(actualValue).toEqual(expectedValue);
+              }
             }
-          }
+          });
         }
 
-        if (test.error) {
-          expect(test.error).toEqual(stderr);
+        if (test.errors && test.errors.length > 0) {
+          test.errors.forEach((errorObj) => {
+            let expectedError = errorObj.error;
+            let actualError = stderr;
+
+            if (errorObj.errorRegex) {
+              let flags = "";
+              if (errorObj.errorIgnoreCase) {
+                flags += "i";
+              }
+              const regex = new RegExp(expectedError, flags);
+              expect(actualError).toMatch(regex);
+            } else {
+              if (errorObj.errorIgnoreCase) {
+                expectedError = expectedError.toLowerCase();
+                actualError = actualError.toLowerCase();
+              }
+
+              if (errorObj.errorPartial) {
+                expect(actualError).toContain(expectedError);
+              } else {
+                expect(actualError).toEqual(expectedError);
+              }
+            }
+          });
+        } else if (exitCode !== 0) {
+          throw new Error(
+            `Error executing command:\n  ${test.execute.yellow}\n  ${(stderr || "").replace("\n", "\n  ").red}`
+          );
         }
       });
     });

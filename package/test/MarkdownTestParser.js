@@ -8,8 +8,9 @@ const BEFORE_EACH_REGEX = /^```beforeEach\n(?<cmd>.+?)\n```$/gms;
 const AFTER_EACH_REGEX = /^```afterEach\n(?<cmd>.+?)\n```$/gms;
 const BEFORE_ALL_REGEX = /^```beforeAll\n(?<cmd>.+?)\n```$/gms;
 const AFTER_ALL_REGEX = /^```afterAll\n(?<cmd>.+?)\n```$/gms;
-const TEST_REGEX =
-  /(^-\s(?<title>[^\n]+)\s+)?```execute\s(?<execute>.+?)\n```(\s+```expect(?<expectModifiers>:[^`\s]*)*\s*\n(?<expect>.+?)\s```)?(\s+```error\s*\n(?<error>.+?)\n```)?/gms;
+const EXECUTE_REGEX = /(^-\s(?<title>[^\n]+)\s+)?```execute\s*\n(?<execute>[^`]*?)\n```/gms;
+const EXPECT_REGEX = /```expect(?<expectModifiers>:[^`\s]*)*\s*\n(?<expect>[^`]*?)\n```/gms;
+const ERROR_REGEX = /```error(?<errorModifiers>:[^`\s]*)*\s*\n(?<error>[^`]*?)\n```/gms;
 
 class MarkdownTestParser {
   static parse(file) {
@@ -120,24 +121,75 @@ function parseTests(scenario) {
   const content = scenario.content;
   scenario.tests = [];
 
-  const regex = new RegExp(TEST_REGEX);
-  let match;
+  const executeRegex = new RegExp(EXECUTE_REGEX);
+  let executeMatch;
 
-  while ((match = regex.exec(content)) !== null) {
+  while ((executeMatch = executeRegex.exec(content)) !== null) {
     const test = {
-      title: match.groups.title ? match.groups.title.trim() : undefined,
-      execute: match.groups.execute ? match.groups.execute.trim() : undefined,
-      expect: match.groups.expect ? match.groups.expect : undefined,
-      error: match.groups.error ? match.groups.error : undefined
+      title: executeMatch.groups.title ? executeMatch.groups.title.trim() : undefined,
+      execute: executeMatch.groups.execute ? executeMatch.groups.execute.trim() : undefined,
+      expects: [],
+      errors: []
     };
 
-    // Parse expect modifiers
-    if (match.groups.expectModifiers) {
-      const modifiers = match.groups.expectModifiers.split(':').filter(m => m.length > 0);
-      test.expectIgnoreCase = modifiers.includes('ignoreCase');
-      test.expectPartial = modifiers.includes('partial');
-      test.expectRegex = modifiers.includes('regex');
+    // Find the end position of the current execute block
+    const executeEnd = executeMatch.index + executeMatch[0].length;
+    
+    // Find the start of the next execute block or end of content
+    const nextExecuteMatch = executeRegex.exec(content);
+    const searchEnd = nextExecuteMatch ? nextExecuteMatch.index : content.length;
+    
+    // Reset regex lastIndex to search from execute end
+    executeRegex.lastIndex = executeMatch.index + executeMatch[0].length;
+    
+    // Search for expect blocks between current execute and next execute
+    const expectRegex = new RegExp(EXPECT_REGEX);
+    expectRegex.lastIndex = executeEnd;
+    let expectMatch;
+    
+    while ((expectMatch = expectRegex.exec(content)) !== null && expectMatch.index < searchEnd) {
+      const expectObj = {
+        expect: expectMatch.groups.expect,
+        expectIgnoreCase: false,
+        expectPartial: false,
+        expectRegex: false
+      };
+      
+      // Parse expect modifiers
+      if (expectMatch.groups.expectModifiers) {
+        const modifiers = expectMatch.groups.expectModifiers.split(':').filter(m => m.length > 0);
+        expectObj.expectIgnoreCase = modifiers.includes('ignoreCase');
+        expectObj.expectPartial = modifiers.includes('partial');
+        expectObj.expectRegex = modifiers.includes('regex');
+      }
+      
+      test.expects.push(expectObj);
     }
+    
+    // Search for error blocks between current execute and next execute
+    const errorRegex = new RegExp(ERROR_REGEX);
+    errorRegex.lastIndex = executeEnd;
+    let errorMatch;
+    
+    while ((errorMatch = errorRegex.exec(content)) !== null && errorMatch.index < searchEnd) {
+      const errorObj = {
+        error: errorMatch.groups.error,
+        errorIgnoreCase: false,
+        errorPartial: false,
+        errorRegex: false
+      };
+      
+      // Parse error modifiers
+      if (errorMatch.groups.errorModifiers) {
+        const modifiers = errorMatch.groups.errorModifiers.split(':').filter(m => m.length > 0);
+        errorObj.errorIgnoreCase = modifiers.includes('ignoreCase');
+        errorObj.errorPartial = modifiers.includes('partial');
+        errorObj.errorRegex = modifiers.includes('regex');
+      }
+      
+      test.errors.push(errorObj);
+    }
+    
 
     scenario.tests.push(test);
   }
