@@ -84,7 +84,7 @@ function createScenario(index, scenario, directory, prefix = "") {
         }
 
         if (test.errors && test.errors.length > 0) {
-          test.errors.forEach((errorObj) => {
+          test.errors.forEach(errorObj => {
             let expectedError = errorObj.error;
             let actualError = stderr;
 
