@@ -11,6 +11,7 @@ const AFTER_ALL_REGEX = /^```afterAll\n(?<cmd>.+?)\n```$/gms;
 const EXECUTE_REGEX = /(^-\s(?<title>[^\n]+)\s+)?```execute\s*\n(?<execute>[^`]*?)\n```/gms;
 const EXPECT_REGEX = /```expect(?<expectModifiers>:[^`\s]*)*\s*\n(?<expect>[^`]*?)\n```/gms;
 const ERROR_REGEX = /```error(?<errorModifiers>:[^`\s]*)*\s*\n(?<error>[^`]*?)\n```/gms;
+const TIMEOUT_REGEX = /^```timeout\s*\n(?<timeout>[^`]*?)\n```$/gms;
 
 class MarkdownTestParser {
   static parse(file) {
@@ -129,16 +130,27 @@ function parseTests(scenario) {
       title: executeMatch.groups.title ? executeMatch.groups.title.trim() : undefined,
       execute: executeMatch.groups.execute ? executeMatch.groups.execute.trim() : undefined,
       expects: [],
-      errors: []
+      errors: [],
+      timeout: undefined
     };
 
-    // Find the end position of the current execute block
+    // Find the start and end positions for searching related blocks
+    const executeStart = executeMatch.index;
     const executeEnd = executeMatch.index + executeMatch[0].length;
-    
+
     // Find the start of the next execute block or end of content
     const nextExecuteMatch = executeRegex.exec(content);
     const searchEnd = nextExecuteMatch ? nextExecuteMatch.index : content.length;
-    
+
+    // Find the start of the previous execute block or beginning of content
+    const prevExecuteRegex = new RegExp(EXECUTE_REGEX);
+    let prevExecuteEnd = 0;
+    let prevMatch;
+    while ((prevMatch = prevExecuteRegex.exec(content)) !== null && prevMatch.index < executeStart) {
+      prevExecuteEnd = prevMatch.index + prevMatch[0].length;
+    }
+    const searchStart = prevExecuteEnd;
+
     // Reset regex lastIndex to search from execute end
     executeRegex.lastIndex = executeMatch.index + executeMatch[0].length;
     
@@ -189,7 +201,22 @@ function parseTests(scenario) {
       
       test.errors.push(errorObj);
     }
-    
+
+    // Search for timeout blocks in the range around the current execute block
+    const timeoutRegex = new RegExp(TIMEOUT_REGEX);
+    timeoutRegex.lastIndex = 0;
+    let timeoutMatch;
+
+    while ((timeoutMatch = timeoutRegex.exec(content)) !== null) {
+      // Check if timeout is in the range for this execute block
+      if (timeoutMatch.index >= searchStart && timeoutMatch.index < searchEnd) {
+        const timeoutValue = parseInt(timeoutMatch.groups.timeout.trim(), 10);
+        if (!isNaN(timeoutValue)) {
+          test.timeout = timeoutValue;
+          break; // Only use the first timeout block found
+        }
+      }
+    }
 
     scenario.tests.push(test);
   }

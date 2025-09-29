@@ -53,7 +53,7 @@ function createScenario(index, scenario, directory, prefix = "") {
     });
 
     (scenario.tests || []).forEach((test, index) => {
-      it(`${test.title || `${index + 1}. should print output`}`, async () => {
+      const testFunction = async () => {
         const { stdout, stderr, exitCode } = await executeCommand(test.execute, directory);
 
         if (test.expects && test.expects.length > 0) {
@@ -113,7 +113,13 @@ function createScenario(index, scenario, directory, prefix = "") {
             `Error executing command:\n  ${test.execute.yellow}\n  ${(stderr || "").replace("\n", "\n  ").red}`
           );
         }
-      });
+      };
+
+      if (test.timeout) {
+        it(`${test.title || `${index + 1}. should print output`}`, testFunction, test.timeout);
+      } else {
+        it(`${test.title || `${index + 1}. should print output`}`, testFunction);
+      }
     });
 
     scenario.children.forEach((child, childIndex) => {
