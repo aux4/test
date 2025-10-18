@@ -75,7 +75,17 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
 
               if (expectObj.expectPartial) {
-                expect(actualValue).toContain(expectedValue);
+                // Check if expectedValue contains wildcard pattern *?
+                if (expectedValue.includes('*?')) {
+                  // Convert wildcard pattern to regex
+                  const regexPattern = expectedValue
+                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+                    .replace(/\\\*\\\?/g, '.*?'); // Convert *? to .*? (non-greedy match)
+                  const regex = new RegExp(regexPattern);
+                  expect(actualValue).toMatch(regex);
+                } else {
+                  expect(actualValue).toContain(expectedValue);
+                }
               } else {
                 expect(actualValue).toEqual(expectedValue);
               }
@@ -102,7 +112,17 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
 
               if (errorObj.errorPartial) {
-                expect(actualError).toContain(expectedError);
+                // Check if expectedError contains wildcard pattern *?
+                if (expectedError.includes('*?')) {
+                  // Convert wildcard pattern to regex
+                  const regexPattern = expectedError
+                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+                    .replace(/\\\*\\\?/g, '.*?'); // Convert *? to .*? (non-greedy match)
+                  const regex = new RegExp(regexPattern);
+                  expect(actualError).toMatch(regex);
+                } else {
+                  expect(actualError).toContain(expectedError);
+                }
               } else {
                 expect(actualError).toEqual(expectedError);
               }
