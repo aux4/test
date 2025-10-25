@@ -28,6 +28,7 @@
   "funding": "https://aux4.io/donate",
   "dependencies": {
     "colors": "^1.4.0",
+    "marked": "^13.0.0",
     "strip-color": "^0.1.0"
   },
   "devDependencies": {

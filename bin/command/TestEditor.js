@@ -44,16 +44,23 @@ async function getFileContent(file) {
   }
 
   const trimmedFile = file.trim();
-  if (trimmedFile === "" || trimmedFile === "[]") {
+  if (trimmedFile === "" || trimmedFile === "[]" || trimmedFile === '[""]') {
     return "";
   }
 
   const files = [];
 
   if (trimmedFile.startsWith("[") && trimmedFile.endsWith("]")) {
-    const fileList = JSON.parse(trimmedFile);
-    for (const item of fileList) {
-      files.push(item.trim());
+    try {
+      const fileList = JSON.parse(trimmedFile);
+      for (const item of fileList) {
+        const trimmedItem = item.trim();
+        if (trimmedItem !== "") {
+          files.push(trimmedItem);
+        }
+      }
+    } catch (error) {
+      throw new Error(`Invalid JSON in file parameter: ${trimmedFile}`);
     }
   } else {
     files.push(trimmedFile);

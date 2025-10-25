@@ -5,16 +5,27 @@ const { executeCommand } = require("./TestUtils");
 
 const files = process.env.AUX4_TEST_FILES || "";
 
-files.split(",").forEach(file => {
+// Parse all files synchronously and create tests
+const fileList = files.split(",").filter(f => f.trim());
+
+for (const file of fileList) {
   const fileName = file.split("/").pop();
   const directory = file.substring(0, file.lastIndexOf("/"));
 
-  describe(`Test file ${fileName}`.cyan, () => {
+  try {
     const scenarios = MarkdownTestParser.parse(file);
 
-    scenarios.forEach((scenario, index) => createScenario(index, scenario, directory));
-  });
-});
+    describe(`Test file ${fileName}`.cyan, () => {
+      scenarios.forEach((scenario, index) => createScenario(index, scenario, directory));
+    });
+  } catch (error) {
+    describe(`Test file ${fileName}`.cyan, () => {
+      it('should parse successfully', () => {
+        throw error;
+      });
+    });
+  }
+}
 
 function createScenario(index, scenario, directory, prefix = "") {
   describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
@@ -75,12 +86,13 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
 
               if (expectObj.expectPartial) {
-                // Check if expectedValue contains wildcard pattern *?
-                if (expectedValue.includes('*?')) {
+                // Check if expectedValue contains wildcard pattern (* or *?)
+                if (expectedValue.includes('*')) {
                   // Convert wildcard pattern to regex
                   const regexPattern = expectedValue
                     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-                    .replace(/\\\*\\\?/g, '.*?'); // Convert *? to .*? (non-greedy match)
+                    .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
+                    .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
                   expect(actualValue).toMatch(regex);
                 } else {
@@ -112,12 +124,13 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
 
               if (errorObj.errorPartial) {
-                // Check if expectedError contains wildcard pattern *?
-                if (expectedError.includes('*?')) {
+                // Check if expectedError contains wildcard pattern (* or *?)
+                if (expectedError.includes('*')) {
                   // Convert wildcard pattern to regex
                   const regexPattern = expectedError
                     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-                    .replace(/\\\*\\\?/g, '.*?'); // Convert *? to .*? (non-greedy match)
+                    .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
+                    .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
                   expect(actualError).toMatch(regex);
                 } else {

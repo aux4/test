@@ -16,7 +16,9 @@ export default defineConfig({
       input: 'bin/executable.js',
       external: [
         ...builtinModules,
-        'fsevents'
+        'fsevents',
+        'colors',
+        'marked'
       ],
       plugins: [
         preserveShebang(),
