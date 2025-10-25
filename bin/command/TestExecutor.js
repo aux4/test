@@ -1,5 +1,5 @@
 const Test = require("../../lib/Test");
-const { resolve } = require("../../package/test/TestUtils");
+const { resolve } = require("../../package/engine/TestUtils");
 
 class TestExecutor {
   static async run(testFileDir, action) {

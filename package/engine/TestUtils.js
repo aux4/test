@@ -1,6 +1,9 @@
 const path = require("path");
 const fs = require("fs");
-const stripColor = require("strip-color");
+const stripColorModule = require("strip-color");
+const stripColor = typeof stripColorModule === 'function' ? stripColorModule : stripColorModule.default || function(str) {
+  return str.replace(/\x1B[[(?);]{0,2}(;?\d)*./g, '');
+};
 const childProcess = require("child_process");
 
 class ExecutorError extends Error {

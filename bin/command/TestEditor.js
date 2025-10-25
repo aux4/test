@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { executeCommand } = require("../../package/test/TestUtils");
+const { executeCommand } = require("../../package/engine/TestUtils");
 const path = require("path");
 
 class TestEditor {
@@ -20,20 +20,43 @@ class TestEditor {
   }
 }
 
+function getRequiredBackticks(content) {
+  // Find the longest sequence of consecutive backticks in the content
+  const matches = content.match(/`+/g) || [];
+  let maxBackticks = 2;
+
+  if (matches.length > 0) {
+    const lengths = matches.map(match => match.length);
+    maxBackticks = Math.max(...lengths);
+  }
+
+  // Return at least 3 backticks, or more if needed to escape content
+  return Math.max(3, maxBackticks + 1);
+}
+
+function createBackticks(count) {
+  return '`'.repeat(count);
+}
+
 async function getFileContent(file) {
-  if (!file) {
+  if (!file || typeof file !== 'string') {
+    return "";
+  }
+
+  const trimmedFile = file.trim();
+  if (trimmedFile === "" || trimmedFile === "[]") {
     return "";
   }
 
   const files = [];
 
-  if (file.startsWith("[") && file.endsWith("]")) {
-    const fileList = JSON.parse(file);
+  if (trimmedFile.startsWith("[") && trimmedFile.endsWith("]")) {
+    const fileList = JSON.parse(trimmedFile);
     for (const item of fileList) {
       files.push(item.trim());
     }
   } else {
-    files.push(file);
+    files.push(trimmedFile);
   }
 
   if (files.length === 0) {
@@ -57,10 +80,12 @@ async function getFileContent(file) {
       content = content.slice(0, -1);
     }
 
+    const backticks = createBackticks(getRequiredBackticks(content));
+
     textContent += `
-\`\`\`file:${file}
+${backticks}file:${file}
 ${content}
-\`\`\`
+${backticks}
 `;
   }
 
@@ -74,28 +99,33 @@ async function getExecuteContent(execute) {
 
   const { stdout, stderr } = await executeCommand(execute, path.resolve("."));
 
+  // Calculate required backticks for all content
+  const allContent = [execute, stdout, stderr].filter(Boolean).join('\n');
+  const requiredBackticks = getRequiredBackticks(allContent);
+  const backticks = createBackticks(requiredBackticks);
+
   let expect = "";
   if (stdout) {
     expect = `
-\`\`\`expect
+${backticks}expect
 ${stdout}
-\`\`\`
+${backticks}
 `;
   }
 
   let error = "";
   if (stderr) {
     error = `
-\`\`\`error
+${backticks}error
 ${stderr}
-\`\`\`
+${backticks}
 `;
   }
 
   return `
-\`\`\`execute
+${backticks}execute
 ${execute}
-\`\`\`
+${backticks}
 ${expect}${error}
 `;
 }

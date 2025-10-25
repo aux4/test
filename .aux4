@@ -8,7 +8,7 @@
           "execute": [
             "npm install",
             "npx vite build",
-            "npm install colors strip-color --prefix package/test"
+            "npm install colors strip-color --prefix package/engine"
           ],
           "help": {
             "text": "Build aux4/test"
@@ -20,7 +20,7 @@
             "rm -f package/*.zip",
             "npm install",
             "npx vite build",
-            "npm install colors strip-color --prefix package/test",
+            "npm install colors strip-color --prefix package/engine",
             "alias:aux4 aux4 releaser increment-version --dir package",
             "set:version=!aux4 aux4 releaser get-version --dir package",
             "cd package && aux4 aux4 pkger build .",
@@ -37,7 +37,7 @@
             "git pull -r",
             "npm install",
             "npx vite build",
-            "npm install colors strip-color --prefix package/test",
+            "npm install colors strip-color --prefix package/engine",
             "alias:aux4 aux4 releaser increment-version --dir package",
             "set:version=!aux4 aux4 releaser get-version --dir package",
             "cd package && aux4 aux4 pkger build .",
