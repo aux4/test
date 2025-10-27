@@ -22,12 +22,19 @@ echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.
 cat my-test-suite.test.md
 ```
 
-````expect:partial
+````expect
+# Test Suite
+
 ## Simple Echo Test
 
 ```execute
 echo Hello World
 ```
+
+```expect
+Hello World
+```
+
 ````
 
 ## Test Addition with File
@@ -39,14 +46,16 @@ This is sample content for testing
 ```
 
 ```execute
-test -f my-test-suite.test.md || echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 2 --name "File Content Test" --file sample-file.txt --execute "cat sample-file.txt"
+echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 2 --name "File Content Test" --file sample-file.txt --execute "cat sample-file.txt"
 ```
 
 ```execute
 cat my-test-suite.test.md
 ```
 
-````expect:partial
+````expect
+# Test Suite
+
 ## File Content Test
 
 ```file:sample-file.txt
@@ -56,6 +65,11 @@ This is sample content for testing
 ```execute
 cat sample-file.txt
 ```
+
+```expect
+This is sample content for testing
+```
+
 ````
 
 ## Test Addition with Multiple Files
@@ -71,14 +85,16 @@ console.log("Hello from JavaScript");
 ```
 
 ```execute
-test -f my-test-suite.test.md || echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 3 --name "Multiple Files Test" --file sample-file.txt --file another-file.js --execute "echo Processing files"
+echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 3 --name "Multiple Files Test" --file sample-file.txt --file another-file.js --execute "echo Processing files"
 ```
 
 ```execute
 cat my-test-suite.test.md
 ```
 
-````expect:partial
+````expect
+# Test Suite
+
 ### Multiple Files Test
 
 ```file:sample-file.txt
@@ -92,6 +108,11 @@ console.log("Hello from JavaScript");
 ```execute
 echo Processing files
 ```
+
+```expect
+Processing files
+```
+
 ````
 
 ## Test Different Heading Levels
@@ -117,19 +138,24 @@ echo Major test section
 ### Add Level 4 Test
 
 ```execute
-test -f my-test-suite.test.md || echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 4 --name "Detailed Subsection" --execute "echo Detailed test"
+echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 4 --name "Detailed Subsection" --execute "echo Detailed test"
 ```
 
 ```execute
 tail -n 10 my-test-suite.test.md
 ```
 
-````expect:partial
+````expect
 #### Detailed Subsection
 
 ```execute
 echo Detailed test
 ```
+
+```expect
+Detailed test
+```
+
 ````
 
 ## Test Only Execute (No Files)
@@ -153,6 +179,26 @@ date +%Y
 ````
 
 ## Verify Complete Test File Structure
+
+### Build Complete Test File
+
+```file:sample-file.txt
+This is sample content for testing
+```
+
+```file:another-file.js
+console.log("Hello from JavaScript");
+```
+
+```execute
+echo "# Test Suite" > my-test-suite.test.md &&
+aux4 test add my-test-suite.test.md --level 2 --name "Simple Echo Test" --execute "echo Hello World" &&
+aux4 test add my-test-suite.test.md --level 2 --name "File Content Test" --file sample-file.txt --execute "cat sample-file.txt" &&
+aux4 test add my-test-suite.test.md --level 3 --name "Multiple Files Test" --file sample-file.txt --file another-file.js --execute "echo Processing files" &&
+aux4 test add my-test-suite.test.md --level 1 --name "Major Section" --execute "echo Major test section" &&
+aux4 test add my-test-suite.test.md --level 4 --name "Detailed Subsection" --execute "echo Detailed test" &&
+aux4 test add my-test-suite.test.md --level 2 --name "Execute Only Test" --execute "date +%Y"
+```
 
 ### Check Final Test File Content
 

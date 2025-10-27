@@ -2,9 +2,9 @@
 
 aux4 testing tool
 
-aux4/test provides a lightweight test runner and helpers for validating command output and file-based test scenarios within aux4 packages. It exposes commands to run test suites and to add new tests to markdown test files. The package is designed to make writing repeatable, executable tests (execute/expect/error blocks, file blocks, hooks, timeouts, and modifiers) straightforward and scriptable as part of aux4 workflows.
+aux4/test provides a lightweight markdown-driven test runner for aux4 packages. Tests are written as Markdown files with special fenced blocks (execute, expect, error, file, timeout, hooks, etc.). The package interprets these files and runs commands, capturing stdout/stderr and validating output against the provided expectations. It's designed for authoring reproducible command-line tests, verifying CLI behavior, file artefacts, timeouts, and test hooks.
 
-Main use cases include validating CLI behavior, asserting stdout/stderr content with advanced matching modifiers (regex, partial, ignoreCase), testing file scoping and lifecycle (file blocks), and exercising setup/teardown flows with hooks. It integrates with system Node and Jest installations where available and is intended to be used alongside other aux4 packages and CI pipelines to ensure package behavior remains correct.
+This README documents all features exercised by the official test suite. Each section shows real test-file content (copied from the test/ folder) and explains the behavior and usage. Examples are taken verbatim from the repository tests so you can copy and run them.
 
 ## Installation
 
@@ -24,77 +24,33 @@ For more details, see [system-installer](/r/public/packages/aux4/pkger/commands/
 
 ## Quick Start
 
-Run the test suite in the current directory:
+Run the test runner in the current directory:
 
 ```bash
-aux4 test run
+aux4 test run .
 ```
 
-This runs the aux4 test runner against the current directory (default), executing any test markdown files found under test/ or the specified path and validating outputs according to the execute/expect/error blocks.
+This scans for `.test.md` files in the directory structure and runs them using the aux4 test runner. By default the runner uses the directory "."; you may pass another directory as the positional dir variable.
 
-## Running Tests
+The package provides two primary commands:
 
-Run tests in a specific directory or file. The run command validates execute/expect/error blocks, handles file blocks, hooks, modifiers (regex, partial, ignoreCase), and respects per-test timeouts.
+- aux4 test run — run tests (link: ./commands/test/run)
+- aux4 test add — add test entries to a test file (link: ./commands/test/add)
 
-```bash
-aux4 test run <dir>
-```
+See command docs: [aux4 test run](./commands/test/run) and [aux4 test add](./commands/test/add).
 
-- <dir> (positional) — The directory or file to run tests in. Default: `.`  
-- Command documentation: [aux4 test run](./commands/test/run)
+---
 
-Example: run the bundled test suite
+## Execute and Expect Basic Blocks
 
-```bash
-aux4 test run test
-```
+Overview:
 
-## Adding Tests
+- `execute` blocks contain shell commands to run.
+- `expect` blocks validate stdout (exact match by default).
+- `error` blocks validate stderr.
+- A test typically pairs a single `execute` block with one or more expect/error blocks.
 
-Add a new test to an existing test markdown file. The add command appends a test entry with the provided name, level (markdown heading level), optional included files, and the execute line to run.
-
-```bash
-aux4 test add <testFile> --name "Test name" --level 2 --file setup.sh --file input.txt --execute "echo hello"
-```
-
-- testFile (positional) — The test file to add the test to (required)  
-- level — The markdown title level for the test (default: 2)  
-- name — The name/title of the test  
-- file (multiple) — Files to include in the test block (each becomes a file:... block)  
-- execute — The command line to execute in the test  
-- Command documentation: [aux4 test add](./commands/test/add)
-
-## Assertions & Modifiers
-
-aux4/test supports several assertion styles and modifiers embedded in test markdown files:
-
-- `execute` / `expect` / `error` — Basic command output assertions
-- `expect:ignoreCase` — Case-insensitive matching
-- `expect:partial` — Substring and wildcard matching with `*?`
-- `expect:regex` — Regular expression matching
-- Combined modifiers like `expect:regex:ignoreCase`
-
-These are demonstrated in the included test files under test/.
-
-## Hooks and File Blocks
-
-Tests may include lifecycle hooks and file blocks to prepare and isolate test environments:
-
-- `beforeAll` / `afterAll` — Run once for a group of tests
-- `beforeEach` / `afterEach` — Run around each test
-- `file:filename` blocks — Create files available to nested tests (scoped)
-
-See the hooks and file-scope examples below for typical patterns.
-
-## Timeouts
-
-Per-test timeouts can be specified with a `timeout` block. This allows long-running commands to be given higher limits while keeping short tests fast. If omitted, the default Jest timeout applies.
-
-## Examples
-
-### Simple execute/expect assertions
-
-The following excerpt (from test/execute-expect.test.md) demonstrates basic execute and expect blocks that assert stdout and stderr.
+Example (from test/execute-expect.test.md):
 
 ````markdown
 # Execute/Expect Basic Functionality
@@ -110,65 +66,66 @@ echo "Hello World"
 ```expect
 Hello World
 ```
+````
 
-## Multi-line Output
+How it works:
+
+- The runner executes the command(s) inside the ```execute block.
+- It captures stdout and stderr separately.
+- The `expect` block is matched against stdout; `error` is matched against stderr.
+- Exact matching: the default `expect` requires the output lines to match exactly (including order and line breaks).
+
+Other examples in the same file illustrate multi-line output, combined stdout/stderr, and environment variable usage.
+
+---
+
+## Expect Modifiers — partial, ignoreCase, regex
+
+The runner supports modifiers appended to the expect/error block token to change matching semantics.
+
+General forms:
+
+- ```expect:partial — substring / wildcard matching
+
+  ```
+
+- ```expect:ignoreCase — case-insensitive exact matching
+
+  ```
+
+- ```expect:regex — regular-expression matching
+
+  ```
+
+- Combinations like ```expect:regex:ignoreCase are supported.
+
+Below are examples directly taken from the tests for each modifier.
+
+Expect:partial (substring and wildcard matching)
+
+````markdown
+# Expect Partial Modifier
+
+Tests for expect:partial modifier to verify substring matching and wildcard pattern matching.
+
+## Simple Substring Match
 
 ```execute
-printf "Line 1\nLine 2\nLine 3\n"
+echo "This is a long output with many words"
 ```
 
-```expect
-Line 1
-Line 2
-Line 3
-```
-
-## Error Output Test
-
-```execute
-echo "Error message" >&2
-```
-
-```error
-Error message
-```
-
-## Combined Output and Error
-
-```execute
-echo "Success output" && echo "Error output" >&2
-```
-
-```expect
-Success output
-```
-
-```error
-Error output
-```
-
-## Environment Variable Test
-
-```execute
-MESSAGE="Test Variable" && echo "$MESSAGE"
-```
-
-```expect
-Test Variable
+```expect:partial
+long output
 ```
 ````
 
-Run this test file:
+Key points:
 
-```bash
-aux4 test run test/execute-expect.test.md
-```
+- `partial` checks that the expected text occurs somewhere in stdout.
+- Wildcards: `*?` acts like a "match anything" placeholder in partial patterns. For example `Start *? end` will match `Start middle end`.
+- `partial` also applies to `error:partial` for stderr.
 
-This validates that the commands produce the expected stdout and stderr shown in the expect/error blocks.
-
-### Case-insensitive assertions (expect:ignoreCase)
-
-The following excerpt (from test/expect-ignorecase.test.md) shows use of the ignoreCase modifier to match outputs regardless of letter case.
+Expect:ignoreCase (case-insensitive matching)
 
 ````markdown
 # Expect IgnoreCase Modifier
@@ -184,49 +141,96 @@ echo "Hello World"
 ```expect:ignoreCase
 hello world
 ```
+````
 
-## Mixed Case Input
+Key points:
 
-```execute
-echo "CamelCase Variable"
-```
+- `ignoreCase` makes the comparison case-insensitive.
+- It works for both `expect` (stdout) and `error` (stderr).
+- Can combine with `regex` so `expect:regex:ignoreCase` runs a case-insensitive regex.
 
-```expect:ignoreCase
-camelcase variable
-```
+Expect:regex (regular expressions)
 
-## All Uppercase Expected
+````markdown
+# Expect Regex Modifier
 
-```execute
-echo "lowercase text"
-```
+Tests for expect:regex modifier to verify regular expression matching in output validation.
 
-```expect:ignoreCase
-LOWERCASE TEXT
-```
-
-## Case Insensitive Error Match
+## Simple Pattern Matching
 
 ```execute
-echo "ERROR: File Not Found" >&2
+echo "Hello World 123"
 ```
 
-```error:ignoreCase
-error: file not found
+```expect:regex
+^Hello World \d+$
 ```
 ````
 
-Run this test file:
+Key points:
 
-```bash
-aux4 test run test/expect-ignorecase.test.md
+- Regexes are applied line-wise unless the pattern covers multiple lines explicitly.
+- Use typical regex escapes (e.g., \d, \b) as in the test examples.
+- `error:regex` validates stderr with a regex.
+
+---
+
+## Multiple Expects for a Single Execute
+
+Overview:
+
+- A single `execute` block may be followed by many expect blocks.
+- All expectations are evaluated against that execute's captured stdout/stderr.
+- This is useful to assert multiple aspects of multi-line output.
+
+Example (from test/multiple-expects-test.test.md):
+
+````markdown
+# Multiple Expects Test
+
+Test that a single execute command can have multiple expect blocks with different modifiers.
+
+## Test Multiple Expects for Single Execute
+
+```execute
+echo "Line 1: Hello World
+Line 2: Testing 123
+Line 3: Final result"
 ```
 
-This verifies that expected text matches regardless of case as shown.
+```expect:partial
+Hello World
+```
 
-### File block scope (file creation and scoping)
+```expect:partial
+Testing 123
+```
 
-The following excerpt (from test/file-scope.test.md) demonstrates how file blocks create files available to nested tests and how scope prevents sibling tests from seeing those files.
+```expect:partial
+Final result
+```
+
+```expect:regex
+Line \d+: Hello World
+```
+````
+
+How it works:
+
+- Each `expect` (or `error`) block is evaluated independently.
+- If any one expectation fails, the test fails (the runner reports which expectation failed).
+
+---
+
+## File Blocks and File Scope
+
+Overview:
+
+- `file:<filename>` blocks create files with the provided content during the test.
+- Files created by `file` blocks are scoped: they are available to nested tests, but siblings do not share file state.
+- File blocks are commonly used to set up fixtures (config files, sample inputs, etc.).
+
+Example (from test/file-scope.test.md):
 
 ````markdown
 # File Block Scope Testing
@@ -248,29 +252,17 @@ cat parent-file.txt
 ```expect
 This file is created at parent level
 ```
+````
 
-### Nested Test 2 - File Still Available in Same Parent
+Important scope rules illustrated by the test:
 
-```execute
-ls parent-file.txt
-```
+- A `file` declared at a parent level is available to nested scenarios/tests beneath it.
+- Files created in one sibling scenario are not visible in other sibling scenarios (each sibling has its own scope).
+- When writing tests, place file blocks at the scenario level that should share those files with nested tests.
 
-```expect
-parent-file.txt
-```
+Example showing sibling isolation (from same test file):
 
-#### Deeply Nested Test - File Should Still Be Available
-
-```execute
-echo "File exists: $(test -f parent-file.txt && echo yes || echo no)"
-```
-
-```expect
-File exists: yes
-```
-
-## Sibling Scenario - File Should NOT Be Available
-
+````markdown
 This scenario is at the same level as "Parent Scenario with File", so the parent-file.txt should not be available here.
 
 ```execute
@@ -282,17 +274,20 @@ File not found
 ```
 ````
 
-Run this test file:
+---
 
-```bash
-aux4 test run test/file-scope.test.md
-```
+## Hooks: beforeAll, afterAll, beforeEach, afterEach
 
-This validates file visibility rules used by aux4 tests.
+Overview:
 
-### Hooks: setup and cleanup
+- Hooks are multi-command blocks that run at certain points in the test lifecycle:
+  - `beforeAll` — run once before the tests in the current scenario.
+  - `afterAll` — run once after all tests in the current scenario.
+  - `beforeEach` — run before each test in the current scenario.
+  - `afterEach` — run after each test in the current scenario.
+- Tests in the repository exercise `beforeAll` and `afterAll`. The runner supports the other hooks as well; they follow the same scoping rules as file blocks.
 
-The following excerpt (from test/hooks.test.md) demonstrates beforeAll and afterAll hooks and creating temporary files for tests.
+Example with beforeAll/afterAll (from test/hooks.test.md):
 
 ````markdown
 # Hooks Functionality
@@ -319,33 +314,25 @@ cat test-dir/setup.log
 ```expect
 Setup complete
 ```
-
-### Test 2 - Create Temporary File
-
-```file:temp-file.txt
-This is a temporary test file.
-```
-
-```execute
-cat temp-file.txt
-```
-
-```expect
-This is a temporary test file.
-```
 ````
 
-Run this test file:
+How it works:
 
-```bash
-aux4 test run test/hooks.test.md
-```
+- `beforeAll` created the directory and file; nested tests verify its presence.
+- `afterAll` removes the created artifacts.
+- `beforeEach` and `afterEach` (not used in the example) would run around each test in the scenario, enabling per-test setup/cleanup (e.g., resetting state or deleting temporary files).
+- Hook blocks may contain multiple shell commands; they are executed in the same shell environment as the tests (so side effects are available).
 
-This verifies that setup files are created before tests and cleaned up after the suite completes.
+---
 
-### Timeout configuration
+## Timeout Block
 
-The following excerpt (from test/timeout.test.md) shows per-test timeout blocks to allow longer-running commands.
+Overview:
+
+- Use a `timeout` block containing a number (milliseconds) to override the default test timeout for the following `execute` block.
+- The test suite demonstrates short and long timeouts to cover long-running commands.
+
+Examples (from test/timeout.test.md):
 
 ````markdown
 # Timeout Functionality
@@ -365,20 +352,209 @@ echo "Quick command"
 ```expect
 Quick command
 ```
+````
 
-## Medium Timeout Test
+More examples in the same file show `5000` and `10000` millisecond timeouts. If no `timeout` block is present, the runner uses the default test framework timeout (e.g., Jest default).
 
-```timeout
-5000
-```
+Practical notes:
+
+- Place the `timeout` block directly before the `execute` it applies to.
+- The timeout must be a numeric value in milliseconds.
+- If the command exceeds the timeout, the test fails with a timeout error.
+
+---
+
+## Error Blocks (stderr) and Combined Output
+
+- `error` blocks validate stderr content (supports the same modifiers as `expect`, e.g., `error:partial`, `error:regex`, `error:ignoreCase`).
+- Tests show combined stdout and stderr where both `expect` and `error` blocks are used for the same execute.
+
+Example snippet (from execute-expect.test.md):
+
+````markdown
+## Combined Output and Error
 
 ```execute
-sleep 1 && echo "Command completed after 1 second"
+echo "Success output" && echo "Error output" >&2
 ```
 
 ```expect
-Command completed after 1 second
+Success output
 ```
+
+```error
+Error output
+```
+````
+
+Key points:
+
+- stdout and stderr are captured separately and matched to `expect` and `error` blocks respectively.
+- If both appear, you can assert on each independently.
+
+---
+
+## Adding/Authoring Tests: aux4 test add
+
+The package includes `aux4 test add` to programmatically append tests to a test markdown file. The test suite includes tests that exercise adding tests with files and different heading levels.
+
+Excerpt (from test/add.test.md):
+
+`````markdown
+# Aux4 Test Add Command
+
+Tests for the `aux4 test add` command functionality to verify test creation and file generation.
+
+```beforeAll
+echo "# Test Suite" > my-test-suite.test.md
+```
+
+```afterAll
+rm -f my-test-suite.test.md sample-file.txt another-file.js
+```
+
+## Basic Test Addition
+
+### Add Simple Test with Execute
+
+```execute
+echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 2 --name "Simple Echo Test" --execute "echo Hello World"
+```
+
+```execute
+cat my-test-suite.test.md
+```
+
+````expect
+# Test Suite
+
+## Simple Echo Test
+
+```execute
+echo Hello World
+```
+
+```expect
+Hello World
+```
+````
+`````
+
+Usage:
+
+- `aux4 test add <testFile> --level <n> --name "<name>" --execute "<command>"` appends a test at the specified Markdown heading level.
+- `--file <path>` may be included multiple times to embed file blocks into the test being added.
+- The add command is useful for generating or updating test files programmatically as part of toolchains.
+
+The add.test.md file includes multiple examples: adding tests with single or multiple files, different heading levels, and execute-only tests. The test verifies that the add command correctly writes headers, file blocks, execute blocks, and expect blocks into the test file.
+
+---
+
+## Putting It All Together — Examples
+
+Below are runnable, real examples taken directly from the tests. Each example includes the test file heading and the important sections so you can see the full test structure.
+
+Example: Basic execute/expect test file fragment
+
+````markdown
+# Execute/Expect Basic Functionality
+
+## Simple Echo Test
+
+```execute
+echo "Hello World"
+```
+
+```expect
+Hello World
+```
+````
+
+Example: Partial matching with wildcards
+
+````markdown
+# Expect Partial Modifier
+
+## Wildcard Pattern with \*?
+
+```execute
+echo "Start middle end"
+```
+
+```expect:partial
+Start *? end
+```
+````
+
+Example: Case-insensitive expect and combining with regex
+
+````markdown
+# Expect IgnoreCase Modifier
+
+## Combined Modifiers - Regex and IgnoreCase
+
+```execute
+echo "Error Code: ABC123"
+```
+
+```expect:regex:ignoreCase
+error code: [a-z]+\d+
+```
+````
+
+Example: File scoping (parent creates a file, nested tests use it)
+
+````markdown
+# File Block Scope Testing
+
+## Parent Scenario with File
+
+```file:parent-file.txt
+This file is created at parent level
+```
+
+### Nested Test 1 - File Should Be Available
+
+```execute
+cat parent-file.txt
+```
+
+```expect
+This file is created at parent level
+```
+````
+
+Example: Hooks setup/teardown
+
+````markdown
+# Hooks Functionality
+
+## Setup and Cleanup Hooks
+
+```beforeAll
+mkdir -p test-dir
+echo "Setup complete" > test-dir/setup.log
+```
+
+```afterAll
+rm -rf test-dir
+```
+
+### Test 1 - Verify Setup
+
+```execute
+cat test-dir/setup.log
+```
+
+```expect
+Setup complete
+```
+````
+
+Example: Timeout usage
+
+````markdown
+# Timeout Functionality
 
 ## Long Timeout Test
 
@@ -395,17 +571,75 @@ Command completed after 2 seconds
 ```
 ````
 
-Run this test file:
+Example: Adding a test using aux4 test add and verifying the produced test file (excerpt)
 
-```bash
-aux4 test run test/timeout.test.md
+`````markdown
+# Aux4 Test Add Command
+
+```execute
+echo "# Test Suite" > my-test-suite.test.md && aux4 test add my-test-suite.test.md --level 2 --name "Simple Echo Test" --execute "echo Hello World"
 ```
 
-This demonstrates using the `timeout` block to control how long a test is allowed to run.
+```execute
+cat my-test-suite.test.md
+```
 
-## Configuration
+````expect
+# Test Suite
 
-This package uses test markdown files located under the test/ directory. No additional configuration file is required to run the bundled tests. Use the `aux4 test add` command to programmatically append new tests to a given test file.
+## Simple Echo Test
+
+```execute
+echo Hello World
+```
+
+```expect
+Hello World
+```
+````
+`````
+
+---
+
+## Test File Conventions and Best Practices
+
+- Each test file is Markdown and SHOULD begin with a top-level heading (# Title). The test runner uses the document structure to group scenarios and nested tests.
+- Use `file:<filename>` blocks to create fixture files. Place them in the scenario where they should be visible (parent level for nested tests to access).
+- Prefer small, focused `execute` blocks and multiple `expect` blocks to validate different aspects of output.
+- Use `expect:partial` for flexible substring tests, `expect:regex` for pattern matching, and `expect:ignoreCase` for case-insensitive comparisons.
+- Use `timeout` only when necessary for long-running commands to avoid hanging test suites.
+- Use `beforeAll` and `afterAll` for expensive setup/cleanup that applies to many tests; use `beforeEach`/`afterEach` for per-test isolation.
+- Avoid sharing state between sibling scenarios; rely on scoped file blocks and hooks to control visibility and cleanup.
+
+---
+
+## Examples Summary
+
+The provided test files in this package demonstrate all primary features:
+
+- test/execute-expect.test.md — execute, expect, error, multi-line output
+- test/expect-partial.test.md — partial matching and wildcard usage
+- test/expect-ignorecase.test.md — case-insensitive matching
+- test/expect-regex.test.md — regex matching
+- test/multiple-expects-test.test.md — multiple expectations per execute
+- test/file-scope.test.md — file blocks and scoping rules
+- test/hooks.test.md — beforeAll/afterAll (and hooks in general)
+- test/timeout.test.md — timeout block usage
+- test/add.test.md — programmatic test creation via aux4 test add
+
+You can open each file to see complete, runnable test fragments. The README examples above copy the real tests so you can replicate them.
+
+---
+
+## Troubleshooting & Tips
+
+- If an `expect` fails, check which block failed and compare the captured stdout/stderr to the expected content.
+- Use `expect:partial` for tests where output contains timestamps, order-insensitive fragments, or variable content.
+- For complex output, prefer `expect:regex` with anchors and groups to precisely target the necessary parts.
+- If files are unexpectedly missing in a scenario, verify where the `file:` block is declared and that scoping matches the intended nested tests.
+- To programmatically add tests, use `aux4 test add` and then inspect the generated `.test.md` file.
+
+---
 
 ## License
 
