@@ -122,7 +122,10 @@ long output
 Key points:
 
 - `partial` checks that the expected text occurs somewhere in stdout.
-- Wildcards: `*?` acts like a "match anything" placeholder in partial patterns. For example `Start *? end` will match `Start middle end`.
+- Wildcards:
+  - `*?` acts like a "match anything" placeholder in partial patterns. For example `Start *? end` will match `Start middle end`.
+  - `*` acts like a greedy "match anything" placeholder.
+  - `**` acts like a multiline "match anything" placeholder that can span across newlines. For example `Start**end` will match `Start\nMiddle content\nend`.
 - `partial` also applies to `error:partial` for stderr.
 
 Expect:ignoreCase (case-insensitive matching)

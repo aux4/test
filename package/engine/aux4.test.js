@@ -91,6 +91,7 @@ function createScenario(index, scenario, directory, prefix = "") {
                   // Convert wildcard pattern to regex
                   const regexPattern = expectedValue
                     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+                    .replace(/\\\*\\\*/g, '[\\s\\S]*')     // Convert ** to [\s\S]* (multiline match)
                     .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
                     .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
@@ -129,6 +130,7 @@ function createScenario(index, scenario, directory, prefix = "") {
                   // Convert wildcard pattern to regex
                   const regexPattern = expectedError
                     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+                    .replace(/\\\*\\\*/g, '[\\s\\S]*')     // Convert ** to [\s\S]* (multiline match)
                     .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
                     .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
