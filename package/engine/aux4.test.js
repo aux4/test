@@ -67,6 +67,13 @@ function createScenario(index, scenario, directory, prefix = "") {
       const testFunction = async () => {
         const { stdout, stderr, exitCode } = await executeCommand(test.execute, directory);
 
+        // Check for command failure first and show meaningful error message
+        if (exitCode !== 0 && (!test.errors || test.errors.length === 0)) {
+          // Use expect pattern to match other test failures, showing what was expected vs the error
+          const expectedOutput = test.expects && test.expects.length > 0 ? test.expects[0].expect : "successful command execution";
+          expect(`Error message: ${stderr || 'No error message provided'}\nExit code: ${exitCode}`).toEqual(expectedOutput);
+        }
+
         if (test.expects && test.expects.length > 0) {
           test.expects.forEach(expectObj => {
             let expectedValue = expectObj.expect;
@@ -143,10 +150,6 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
             }
           });
-        } else if (exitCode !== 0) {
-          throw new Error(
-            `Error executing command:\n  ${test.execute.yellow}\n  ${(stderr || "").replace("\n", "\n  ").red}`
-          );
         }
       };
 
