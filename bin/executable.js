@@ -32,6 +32,16 @@ process.title = "aux4-test";
         await TestEditor.addTest(params);
         break;
       }
+      case "inspect": {
+        const [, testFile, name, dir] = args;
+        if (!testFile || !name || !dir) {
+          console.error("Usage: inspect <testFile> <name> <dir>");
+          process.exit(1);
+        }
+        const params = { testFile, name, dir };
+        await TestEditor.inspectTest(params);
+        break;
+      }
       default:
         console.error(`Unknown action: ${action}`);
         process.exit(1);

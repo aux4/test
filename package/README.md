@@ -97,7 +97,11 @@ General forms:
 
   ```
 
-- Combinations like ```expect:regex:ignoreCase are supported.
+- ```expect:json — JSON formatting (pretty-print compact JSON before comparing)
+
+  ```
+
+- Combinations like ```expect:regex:ignoreCase are supported. The `:json` modifier can also be combined with others: ```expect:json:partial, ```expect:json:ignoreCase, ```expect:json:regex.
 
 Below are examples directly taken from the tests for each modifier.
 
@@ -175,6 +179,60 @@ Key points:
 - Regexes are applied line-wise unless the pattern covers multiple lines explicitly.
 - Use typical regex escapes (e.g., \d, \b) as in the test examples.
 - `error:regex` validates stderr with a regex.
+
+Expect:json (JSON formatting)
+
+The `:json` modifier pretty-prints compact JSON output before comparison. When a command outputs inline/compact JSON like `{"name":"John","age":30}`, the modifier parses it and reformats it with `JSON.stringify(JSON.parse(value), null, 2)` so the `expect` block can be written in a human-readable, indented format.
+
+The JSON formatting is applied to the **actual output** (stdout or stderr) before any other modifier logic runs. This means `:json` can be combined with other modifiers:
+
+- `expect:json` — exact match against pretty-printed JSON
+- `expect:json:partial` — substring/wildcard match against pretty-printed JSON
+- `expect:json:ignoreCase` — case-insensitive match against pretty-printed JSON
+- `expect:json:regex` — regex match against pretty-printed JSON
+- `error:json` — same behavior for stderr
+
+If the output is not valid JSON, it is left as-is and the test will fail with a meaningful diff showing what was expected vs. the raw output.
+
+````markdown
+# Expect JSON Modifier
+
+## Basic JSON Object
+
+```execute
+echo '{"name":"John","age":30}'
+```
+
+```expect:json
+{
+  "name": "John",
+  "age": 30
+}
+```
+
+## JSON Combined with Partial
+
+```execute
+echo '{"status":"ok","data":{"count":42,"items":["x","y"]}}'
+```
+
+```expect:json:partial
+"count": 42
+```
+
+## Error JSON
+
+```execute
+echo '{"error":"not found","code":404}' >&2
+```
+
+```error:json
+{
+  "error": "not found",
+  "code": 404
+}
+```
+````
 
 ---
 
@@ -624,6 +682,7 @@ The provided test files in this package demonstrate all primary features:
 - test/expect-partial.test.md — partial matching and wildcard usage
 - test/expect-ignorecase.test.md — case-insensitive matching
 - test/expect-regex.test.md — regex matching
+- test/expect-json.test.md — JSON formatting modifier
 - test/multiple-expects-test.test.md — multiple expectations per execute
 - test/file-scope.test.md — file blocks and scoping rules
 - test/hooks.test.md — beforeAll/afterAll (and hooks in general)

@@ -16,14 +16,18 @@ export default defineConfig({
       input: 'bin/executable.js',
       external: [
         ...builtinModules,
-        'fsevents',
-        'colors',
-        'marked'
+        'fsevents'
       ],
       plugins: [
         preserveShebang(),
-        nodeResolve({ preferBuiltins: true }),
-        commonjs({ ignore: ['fsevents'] })
+        nodeResolve({
+          preferBuiltins: true,
+          exportConditions: ['node']
+        }),
+        commonjs({
+          ignore: ['fsevents'],
+          requireReturnsDefault: 'auto'
+        })
       ],
       output: {
         entryFileNames: 'aux4-test.js',

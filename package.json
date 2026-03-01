@@ -8,7 +8,8 @@
     "aux4-test": "bin/executable.js"
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "build": "npx vite build"
   },
   "repository": {
     "type": "git",
@@ -28,13 +29,13 @@
   "funding": "https://aux4.io/donate",
   "dependencies": {
     "colors": "^1.4.0",
-    "marked": "^13.0.0",
+    "marked": "^17.0.0",
     "strip-color": "^0.1.0"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "rollup-plugin-preserve-shebang": "^1.0.1",
-    "vite": "^6.3.3"
+    "vite": "^7.3.1"
   }
 }

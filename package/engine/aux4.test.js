@@ -79,6 +79,14 @@ function createScenario(index, scenario, directory, prefix = "") {
             let expectedValue = expectObj.expect;
             let actualValue = stdout;
 
+            if (expectObj.expectJson) {
+              try {
+                actualValue = JSON.stringify(JSON.parse(actualValue), null, 2);
+              } catch (e) {
+                // leave as-is if not valid JSON, the test will fail with a meaningful diff
+              }
+            }
+
             if (expectObj.expectRegex) {
               let flags = "";
               if (expectObj.expectIgnoreCase) {
@@ -117,6 +125,14 @@ function createScenario(index, scenario, directory, prefix = "") {
           test.errors.forEach(errorObj => {
             let expectedError = errorObj.error;
             let actualError = stderr;
+
+            if (errorObj.errorJson) {
+              try {
+                actualError = JSON.stringify(JSON.parse(actualError), null, 2);
+              } catch (e) {
+                // leave as-is if not valid JSON, the test will fail with a meaningful diff
+              }
+            }
 
             if (errorObj.errorRegex) {
               let flags = "";
