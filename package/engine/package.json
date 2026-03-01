@@ -2,7 +2,7 @@
   "dependencies": {
     "colors": "^1.4.0",
     "jest": "^30.2.0",
-    "marked": "^13.0.3",
+    "marked": "^17.0.3",
     "strip-color": "^0.1.0"
   }
 }
