@@ -189,7 +189,8 @@ function parseWithMarked(scenario) {
           expectIgnoreCase: modifiers.includes(':ignoreCase'),
           expectPartial: modifiers.includes(':partial'),
           expectRegex: modifiers.includes(':regex'),
-          expectJson: modifiers.includes(':json')
+          expectJson: modifiers.includes(':json'),
+          expectAi: modifiers.includes(':ai')
         };
         currentTest.expects.push(expectObj);
       }
@@ -201,7 +202,8 @@ function parseWithMarked(scenario) {
           errorIgnoreCase: modifiers.includes(':ignoreCase'),
           errorPartial: modifiers.includes(':partial'),
           errorRegex: modifiers.includes(':regex'),
-          errorJson: modifiers.includes(':json')
+          errorJson: modifiers.includes(':json'),
+          errorAi: modifiers.includes(':ai')
         };
         currentTest.errors.push(errorObj);
       }

@@ -83,4 +83,34 @@ async function executeCommand(command, directory) {
   return { exitCode, stdout, stderr };
 }
 
-module.exports = { resolve, executeCommand };
+function substituteVariables(text, params) {
+  if (!text || !params || Object.keys(params).length === 0) return text;
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, varName) => {
+    const trimmed = varName.trim();
+    return params.hasOwnProperty(trimmed) ? params[trimmed] : match;
+  });
+}
+
+function findSuiteFile(dir) {
+  const suiteFile = path.resolve(dir, "test.suite.md");
+  return fs.existsSync(suiteFile) ? suiteFile : null;
+}
+
+function resolveSuite(dir, groups, selectedGroups) {
+  let filtered;
+  if (selectedGroups && selectedGroups.length > 0) {
+    filtered = groups.filter(g => selectedGroups.includes(g.title));
+  } else {
+    filtered = groups.filter(g => !g.optional);
+  }
+
+  const files = [];
+  for (const group of filtered) {
+    for (const file of group.files) {
+      files.push(path.resolve(dir, file));
+    }
+  }
+  return files;
+}
+
+module.exports = { resolve, executeCommand, substituteVariables, findSuiteFile, resolveSuite };

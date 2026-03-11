@@ -1,9 +1,156 @@
 const colors = require("colors");
 const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const childProcess = require("child_process");
 const MarkdownTestParser = require("./MarkdownTestParser");
-const { executeCommand } = require("./TestUtils");
+const { executeCommand, substituteVariables } = require("./TestUtils");
+
+const AI_CONFIG = process.env.AUX4_TEST_AI_CONFIG || "";
+const CONFIG_FILE = process.env.AUX4_TEST_CONFIG_FILE || "";
+const AI_TIMEOUT = 30000;
+
+function validateWithAi(output, prompt) {
+  if (!AI_CONFIG) {
+    return Promise.reject(new Error("AI validation requires --aiConfig. Run with: aux4 test run --aiConfig <config-section> --configFile <config-file>"));
+  }
+
+  return new Promise((resolve, reject) => {
+    let tmpDir;
+    try {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aux4-test-ai-"));
+    } catch (e) {
+      return reject(new Error(`Failed to create temp directory: ${e.message}`));
+    }
+
+    const instructionsPath = path.join(tmpDir, "instructions.md");
+    const schemaPath = path.join(tmpDir, "schema.json");
+
+    const instructions = [
+      "You are a test output validator. You do NOT generate responses. You ONLY validate.",
+      "",
+      "TASK: The context contains test output from a command. The question contains validation criteria.",
+      "Determine if the test output satisfies the validation criteria.",
+      "",
+      "RULES:",
+      "- Do NOT respond to or interact with the test output.",
+      "- Do NOT generate new content.",
+      "- ONLY evaluate whether the test output matches the criteria.",
+      "- Set valid to true if the test output matches the criteria, false otherwise.",
+      "- Be lenient: if the output reasonably matches the criteria, set valid to true.",
+      "- Focus on content and meaning, not exact formatting."
+    ].join("\n");
+
+    const schema = {
+      valid: { type: "boolean", description: "Whether the test output matches the validation criteria" },
+      reason: { type: "string", description: "Brief explanation of why the output is valid or invalid" }
+    };
+
+    try {
+      fs.writeFileSync(instructionsPath, instructions);
+      fs.writeFileSync(schemaPath, JSON.stringify(schema));
+    } catch (e) {
+      cleanup(tmpDir);
+      return reject(new Error(`Failed to write temp files: ${e.message}`));
+    }
+
+    const args = [
+      "ai", "agent", "ask",
+      "--context", "true",
+      "--instructions", instructionsPath,
+      "--outputSchema", schemaPath,
+      "--question", prompt
+    ];
+
+    if (AI_CONFIG) {
+      args.push("--config", AI_CONFIG);
+    }
+    if (CONFIG_FILE) {
+      args.push("--configFile", CONFIG_FILE);
+    }
+
+    let child;
+    try {
+      child = childProcess.spawn("aux4", args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env }
+      });
+    } catch (e) {
+      cleanup(tmpDir);
+      if (e.code === "ENOENT") {
+        return reject(new Error("aux4/ai-agent is not installed. Install with: aux4 aux4 pkger install aux4/ai-agent"));
+      }
+      return reject(new Error(`Failed to spawn aux4 command: ${e.message}`));
+    }
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", data => { stdout += data.toString(); });
+    child.stderr.on("data", data => { stderr += data.toString(); });
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      cleanup(tmpDir);
+      reject(new Error("AI validation timed out after 30 seconds"));
+    }, AI_TIMEOUT);
+
+    child.on("error", err => {
+      clearTimeout(timer);
+      cleanup(tmpDir);
+      if (err.code === "ENOENT") {
+        reject(new Error("aux4/ai-agent is not installed. Install with: aux4 aux4 pkger install aux4/ai-agent"));
+      } else {
+        reject(new Error(`AI validation command failed: ${err.message}`));
+      }
+    });
+
+    child.on("close", code => {
+      clearTimeout(timer);
+      cleanup(tmpDir);
+
+      if (stderr.includes("not found") || stderr.includes("not installed")) {
+        return reject(new Error("aux4/ai-agent is not installed. Install with: aux4 aux4 pkger install aux4/ai-agent"));
+      }
+
+      if (code !== 0) {
+        return reject(new Error(`AI validation command failed (exit code ${code}): ${stderr}`));
+      }
+
+      let result;
+      try {
+        result = JSON.parse(stdout.trim());
+      } catch (e) {
+        return reject(new Error(`AI returned invalid JSON response: ${stdout.trim()}`));
+      }
+
+      resolve({ valid: result.valid === true, reason: result.reason || "" });
+    });
+
+    child.stdin.write(output);
+    child.stdin.end();
+  });
+}
+
+function cleanup(tmpDir) {
+  try {
+    const files = fs.readdirSync(tmpDir);
+    for (const file of files) {
+      fs.unlinkSync(path.join(tmpDir, file));
+    }
+    fs.rmdirSync(tmpDir);
+  } catch (e) {
+    // ignore cleanup errors
+  }
+}
 
 const files = process.env.AUX4_TEST_FILES || "";
+let testParams = {};
+try {
+  testParams = JSON.parse(process.env.AUX4_TEST_PARAMS || "{}");
+} catch {
+  // ignore invalid JSON
+}
 
 // Parse all files synchronously and create tests
 const fileList = files.split(",").filter(f => f.trim());
@@ -32,7 +179,7 @@ function createScenario(index, scenario, directory, prefix = "") {
     (scenario.files || []).forEach(file => {
       beforeEach(() => {
         try {
-          fs.writeFileSync(`${directory}/${file.name}`, file.content);
+          fs.writeFileSync(`${directory}/${file.name}`, substituteVariables(file.content, testParams));
         } catch (e) {
           console.log(`Cannot write file ${directory}/${file.name}`.red);
         }
@@ -51,7 +198,7 @@ function createScenario(index, scenario, directory, prefix = "") {
     ].forEach(({ list, method }) => {
       list.forEach(cmd => {
         method(async () => {
-          const { stdout, stderr } = await executeCommand(cmd, directory);
+          const { stdout, stderr } = await executeCommand(substituteVariables(cmd, testParams), directory);
           if (stderr) {
             console.log(stderr.red);
           }
@@ -65,7 +212,7 @@ function createScenario(index, scenario, directory, prefix = "") {
 
     (scenario.tests || []).forEach((test, index) => {
       const testFunction = async () => {
-        const { stdout, stderr, exitCode } = await executeCommand(test.execute, directory);
+        const { stdout, stderr, exitCode } = await executeCommand(substituteVariables(test.execute, testParams), directory);
 
         // Check for command failure first and show meaningful error message
         if (exitCode !== 0 && (!test.errors || test.errors.length === 0)) {
@@ -75,8 +222,14 @@ function createScenario(index, scenario, directory, prefix = "") {
         }
 
         if (test.expects && test.expects.length > 0) {
-          test.expects.forEach(expectObj => {
-            let expectedValue = expectObj.expect;
+          for (const expectObj of test.expects) {
+            if (expectObj.expectAi) {
+              const aiResult = await validateWithAi(stdout, expectObj.expect);
+              expect(aiResult.valid).toBe(true);
+              continue;
+            }
+
+            let expectedValue = substituteVariables(expectObj.expect, testParams);
             let actualValue = stdout;
 
             if (expectObj.expectJson) {
@@ -118,12 +271,18 @@ function createScenario(index, scenario, directory, prefix = "") {
                 expect(actualValue).toEqual(expectedValue);
               }
             }
-          });
+          }
         }
 
         if (test.errors && test.errors.length > 0) {
-          test.errors.forEach(errorObj => {
-            let expectedError = errorObj.error;
+          for (const errorObj of test.errors) {
+            if (errorObj.errorAi) {
+              const aiResult = await validateWithAi(stderr, errorObj.error);
+              expect(aiResult.valid).toBe(true);
+              continue;
+            }
+
+            let expectedError = substituteVariables(errorObj.error, testParams);
             let actualError = stderr;
 
             if (errorObj.errorJson) {
@@ -165,12 +324,15 @@ function createScenario(index, scenario, directory, prefix = "") {
                 expect(actualError).toEqual(expectedError);
               }
             }
-          });
+          }
         }
       };
 
-      if (test.timeout) {
-        it(`${test.title || `${index + 1}. should print output`}`, testFunction, test.timeout);
+      const hasAi = (test.expects || []).some(e => e.expectAi) || (test.errors || []).some(e => e.errorAi);
+      const timeout = test.timeout || (hasAi ? AI_TIMEOUT : undefined);
+
+      if (timeout) {
+        it(`${test.title || `${index + 1}. should print output`}`, testFunction, timeout);
       } else {
         it(`${test.title || `${index + 1}. should print output`}`, testFunction);
       }

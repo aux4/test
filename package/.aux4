@@ -10,6 +10,9 @@
     "test",
     "testing"
   ],
+  "dependencies": [
+    "aux4/config"
+  ],
   "system": [
     [
       "test:node --version",
@@ -42,7 +45,7 @@
         {
           "name": "run",
           "execute": [
-            "node ${packageDir}/lib/aux4-test.js run ${packageDir} ${dir}"
+            "node ${packageDir}/lib/aux4-test.js run ${packageDir} ${dir} value(*)"
           ],
           "help": {
             "text": "Run aux4 tests",
@@ -52,6 +55,27 @@
                 "text": "The directory to run the tests in",
                 "default": ".",
                 "arg": true
+              },
+              {
+                "name": "configFile",
+                "text": "Path to the config file",
+                "default": ""
+              },
+              {
+                "name": "config",
+                "text": "Config section name",
+                "default": ""
+              },
+              {
+                "name": "aiConfig",
+                "text": "Config section for AI agent (used by expect:ai/error:ai)",
+                "default": ""
+              },
+              {
+                "name": "group",
+                "text": "Run only tests from the specified group(s)",
+                "default": "",
+                "multiple": true
               }
             ]
           }
