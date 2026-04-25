@@ -76,6 +76,11 @@
                 "text": "Run only tests from the specified group(s)",
                 "default": "",
                 "multiple": true
+              },
+              {
+                "name": "output",
+                "text": "Write structured JSON results to this file",
+                "default": ""
               }
             ]
           }

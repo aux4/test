@@ -60,6 +60,7 @@ process.title = "aux4-test";
                 if (parsed.configFile) process.env.AUX4_TEST_CONFIG_FILE = parsed.configFile;
                 if (parsed.aiConfig) process.env.AUX4_TEST_AI_CONFIG = parsed.aiConfig;
                 if (parsed.group) process.env.AUX4_TEST_GROUP = parsed.group;
+                if (parsed.output) process.env.AUX4_TEST_OUTPUT = parsed.output;
               }
             } catch {
               // Not valid JSON, treat as file path

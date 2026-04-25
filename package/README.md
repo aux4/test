@@ -662,6 +662,179 @@ Hello World
 
 ---
 
+## Expect:similar — Deterministic Text Similarity
+
+The `:similar` modifier compares the command output against a reference using text similarity metrics. No LLM calls — fully deterministic with zero token cost.
+
+Two forms for providing the reference:
+
+**Inline reference** (content below `---` separator):
+
+````markdown
+```execute
+echo "Hello World"
+```
+
+```expect:similar
+metric: fuzzy
+pass: 0.8
+---
+Hello World
+```
+````
+
+**File reference:**
+
+````markdown
+```file:expected/output.txt
+Hello World
+```
+
+```execute
+echo "Hello World!"
+```
+
+```expect:similar
+pass: 0.9
+file: expected/output.txt
+```
+````
+
+Block fields:
+
+- `name` — optional label for the score (appears in JSON output)
+- `metric` — similarity algorithm: `fuzzy` (default), `cosine`, `jaccard`
+- `pass` — minimum similarity score 0-1 (default: `0.8`)
+- `file` — path to reference file (alternative to inline content)
+
+Available metrics:
+
+- `fuzzy` — Levenshtein distance ratio (0-1). Character-level similarity. Good for "almost the same" text.
+- `cosine` — word-level cosine similarity (0-1). Good for meaning overlap regardless of word order.
+- `jaccard` — word set intersection/union (0-1). Good for "same words present."
+
+Can be combined with `:ignoreCase`:
+
+````markdown
+```expect:similar:ignoreCase
+pass: 0.9
+---
+hello world
+```
+````
+
+Output:
+
+```
+  similarity: 0.92 (fuzzy)  ✓ PASS (>= 0.8)
+```
+
+---
+
+## Expect:ai:score — LLM-as-a-Judge Scoring
+
+The `:ai:score` modifier uses an LLM to score the command output on a criterion, returning a numeric score instead of pass/fail. Requires `--aiConfig` and `--configFile` like `expect:ai`.
+
+````markdown
+```execute
+cat config.yaml
+```
+
+```expect:ai:score
+name: correctness
+eval: Does the output match expected/config.yaml?
+range: 1-5
+pass: 3
+```
+
+```expect:ai:score
+name: completeness
+eval: Are all required fields present?
+```
+````
+
+Block fields:
+
+- `name` — optional label for the score
+- `eval` — what to evaluate (required, the judge prompt)
+- `range` — score range as `min-max` (default: `1-5`)
+- `pass` — minimum passing score (default: `3`)
+
+The judge agent has `readFile` tool access, so the `eval` text can reference files created by `file:` blocks (e.g., "Does the output match expected/config.yaml?").
+
+Output:
+
+```
+  correctness: 5/5   Values match the ground truth
+  completeness: 4/5   Missing optional headers
+  ✓ PASS (all criteria met)
+```
+
+Run with:
+
+```bash
+aux4 test run test.md --aiConfig agent --configFile config.yaml
+```
+
+---
+
+## JSON Output — --output flag
+
+Write structured test results to a JSON file:
+
+```bash
+aux4 test run test/ --output results.json
+```
+
+The JSON includes all test results with scores and assertion outcomes:
+
+```json
+{
+  "timestamp": "2026-04-25T10:30:00Z",
+  "tests": [
+    {
+      "title": "should create valid config",
+      "passed": true,
+      "duration": 8400,
+      "results": [
+        { "type": "exact", "passed": true },
+        { "type": "similar", "name": "structure", "metric": "fuzzy", "score": 0.92, "pass": 0.8 },
+        { "type": "ai:score", "name": "correctness", "eval": "Does it match?", "score": 5, "max": 5, "pass": 3, "reason": "Values match" }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0
+  }
+}
+```
+
+---
+
+## Nested File Paths
+
+`file:` blocks automatically create parent directories if they don't exist, and clean up only the directories that were created:
+
+````markdown
+```file:nested/deep/config.yaml
+host: localhost
+port: 3000
+```
+
+```execute
+cat nested/deep/config.yaml
+```
+
+```expect
+host: localhost
+port: 3000
+```
+````
+
+---
+
 ## Test File Conventions and Best Practices
 
 - Each test file is Markdown and SHOULD begin with a top-level heading (# Title). The test runner uses the document structure to group scenarios and nested tests.
@@ -688,6 +861,10 @@ The provided test files in this package demonstrate all primary features:
 - test/hooks.test.md — beforeAll/afterAll (and hooks in general)
 - test/timeout.test.md — timeout block usage
 - test/add.test.md — programmatic test creation via aux4 test add
+- test/expect-similar.test.md — text similarity matching (fuzzy, cosine, jaccard)
+- test/expect-ai-score.test.md — LLM-as-a-judge scoring
+- test/output-json.test.md — JSON output flag
+- test/file-nested-path.test.md — nested directory creation for file blocks
 
 You can open each file to see complete, runnable test fragments. The README examples above copy the real tests so you can replicate them.
 

@@ -190,8 +190,30 @@ function parseWithMarked(scenario) {
           expectPartial: modifiers.includes(':partial'),
           expectRegex: modifiers.includes(':regex'),
           expectJson: modifiers.includes(':json'),
-          expectAi: modifiers.includes(':ai')
+          expectAi: modifiers.includes(':ai'),
+          expectScore: modifiers.includes(':score'),
+          expectSimilar: modifiers.includes(':similar')
         };
+
+        // Parse expect:ai:score block fields: name, eval, range, pass
+        if (expectObj.expectScore) {
+          const parsed = parseKeyValueBlock(content);
+          expectObj.scoreName = parsed.name || '';
+          expectObj.scoreEval = parsed.eval || '';
+          expectObj.scoreRange = parseRange(parsed.range || '1-5');
+          expectObj.scorePass = parseFloat(parsed.pass) || 3;
+        }
+
+        // Parse expect:similar block fields: name, metric, pass, file, content (below ---)
+        if (expectObj.expectSimilar) {
+          const { config, content: refContent } = parseSimilarBlock(content);
+          expectObj.similarName = config.name || '';
+          expectObj.similarMetric = config.metric || 'fuzzy'; // default: fuzzy (Levenshtein ratio)
+          expectObj.similarPass = parseFloat(config.pass) || 0.8;
+          expectObj.similarFile = config.file || '';
+          expectObj.similarContent = refContent;
+        }
+
         currentTest.expects.push(expectObj);
       }
     } else if (language.startsWith('error')) {
@@ -211,5 +233,36 @@ function parseWithMarked(scenario) {
   });
 }
 
+
+function parseKeyValueBlock(content) {
+  const result = {};
+  for (const line of content.split('\n')) {
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (key && value) result[key] = value;
+  }
+  return result;
+}
+
+function parseRange(rangeStr) {
+  const parts = rangeStr.split('-').map(s => parseFloat(s.trim()));
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return { min: parts[0], max: parts[1] };
+  }
+  return { min: 1, max: 5 };
+}
+
+function parseSimilarBlock(content) {
+  const separatorIndex = content.indexOf('\n---\n');
+  if (separatorIndex !== -1) {
+    const configSection = content.slice(0, separatorIndex);
+    const refContent = content.slice(separatorIndex + 5); // skip \n---\n
+    return { config: parseKeyValueBlock(configSection), content: refContent };
+  }
+  // No separator — all config, no inline content
+  return { config: parseKeyValueBlock(content), content: '' };
+}
 
 module.exports = MarkdownTestParser;

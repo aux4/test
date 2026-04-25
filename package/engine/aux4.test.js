@@ -5,10 +5,15 @@ const path = require("path");
 const childProcess = require("child_process");
 const MarkdownTestParser = require("./MarkdownTestParser");
 const { executeCommand, substituteVariables } = require("./TestUtils");
+const { computeSimilarity } = require("./Similarity");
 
 const AI_CONFIG = process.env.AUX4_TEST_AI_CONFIG || "";
 const CONFIG_FILE = process.env.AUX4_TEST_CONFIG_FILE || "";
+const OUTPUT_FILE = process.env.AUX4_TEST_OUTPUT || "";
 const AI_TIMEOUT = 30000;
+
+// Collect results for --output JSON
+const testResults = [];
 
 function validateWithAi(output, prompt) {
   if (!AI_CONFIG) {
@@ -132,6 +137,125 @@ function validateWithAi(output, prompt) {
   });
 }
 
+function validateWithScore(output, evalPrompt, range) {
+  if (!AI_CONFIG) {
+    return Promise.reject(new Error("AI scoring requires --aiConfig. Run with: aux4 test run --aiConfig <config-section> --configFile <config-file>"));
+  }
+
+  return new Promise((resolve, reject) => {
+    let tmpDir;
+    try {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aux4-test-score-"));
+    } catch (e) {
+      return reject(new Error(`Failed to create temp directory: ${e.message}`));
+    }
+
+    const instructionsPath = path.join(tmpDir, "instructions.md");
+    const schemaPath = path.join(tmpDir, "schema.json");
+
+    const instructions = [
+      "You are a test output scorer. You do NOT generate responses. You ONLY score.",
+      "",
+      "TASK: The context contains test output from a command. The question contains the evaluation criterion.",
+      `Score the test output on a scale of ${range.min} to ${range.max}.`,
+      "",
+      "RULES:",
+      "- Do NOT respond to or interact with the test output.",
+      "- Do NOT generate new content.",
+      "- ONLY evaluate the test output based on the criterion.",
+      `- Assign a score between ${range.min} (worst) and ${range.max} (best).`,
+      "- Provide a brief reason for the score.",
+      "- If the criterion mentions a file, use readFile to read it for comparison."
+    ].join("\n");
+
+    const schema = {
+      score: { type: "number", description: `Score from ${range.min} to ${range.max}` },
+      reason: { type: "string", description: "Brief explanation for the score" }
+    };
+
+    try {
+      fs.writeFileSync(instructionsPath, instructions);
+      fs.writeFileSync(schemaPath, JSON.stringify(schema));
+    } catch (e) {
+      cleanup(tmpDir);
+      return reject(new Error(`Failed to write temp files: ${e.message}`));
+    }
+
+    const args = [
+      "ai", "agent", "ask",
+      "--context", "true",
+      "--instructions", instructionsPath,
+      "--outputSchema", schemaPath,
+      "--question", evalPrompt
+    ];
+
+    if (AI_CONFIG) {
+      args.push("--config", AI_CONFIG);
+    }
+    if (CONFIG_FILE) {
+      args.push("--configFile", CONFIG_FILE);
+    }
+
+    let child;
+    try {
+      child = childProcess.spawn("aux4", args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env }
+      });
+    } catch (e) {
+      cleanup(tmpDir);
+      if (e.code === "ENOENT") {
+        return reject(new Error("aux4/ai-agent is not installed. Install with: aux4 aux4 pkger install aux4/ai-agent"));
+      }
+      return reject(new Error(`Failed to spawn aux4 command: ${e.message}`));
+    }
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", data => { stdout += data.toString(); });
+    child.stderr.on("data", data => { stderr += data.toString(); });
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      cleanup(tmpDir);
+      reject(new Error("AI scoring timed out after 30 seconds"));
+    }, AI_TIMEOUT);
+
+    child.on("error", err => {
+      clearTimeout(timer);
+      cleanup(tmpDir);
+      if (err.code === "ENOENT") {
+        reject(new Error("aux4/ai-agent is not installed. Install with: aux4 aux4 pkger install aux4/ai-agent"));
+      } else {
+        reject(new Error(`AI scoring command failed: ${err.message}`));
+      }
+    });
+
+    child.on("close", code => {
+      clearTimeout(timer);
+      cleanup(tmpDir);
+
+      if (code !== 0) {
+        return reject(new Error(`AI scoring command failed (exit code ${code}): ${stderr}`));
+      }
+
+      let result;
+      try {
+        result = JSON.parse(stdout.trim());
+      } catch (e) {
+        return reject(new Error(`AI returned invalid JSON response: ${stdout.trim()}`));
+      }
+
+      const score = typeof result.score === "number" ? result.score : range.min;
+      resolve({ score, reason: result.reason || "", max: range.max });
+    });
+
+    child.stdin.write(output);
+    child.stdin.end();
+  });
+}
+
 function cleanup(tmpDir) {
   try {
     const files = fs.readdirSync(tmpDir);
@@ -174,19 +298,59 @@ for (const file of fileList) {
   }
 }
 
+// Write JSON output after all tests complete
+if (OUTPUT_FILE) {
+  afterAll(() => {
+    const output = {
+      timestamp: new Date().toISOString(),
+      tests: testResults,
+      summary: {
+        total: testResults.length,
+        passed: testResults.filter(t => t.passed).length,
+        failed: testResults.filter(t => !t.passed).length
+      }
+    };
+    const dir = path.dirname(OUTPUT_FILE);
+    if (dir && !fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2));
+  });
+}
+
 function createScenario(index, scenario, directory, prefix = "") {
   describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
     (scenario.files || []).forEach(file => {
       beforeEach(() => {
         try {
-          fs.writeFileSync(`${directory}/${file.name}`, substituteVariables(file.content, testParams));
+          const filePath = `${directory}/${file.name}`;
+          const dir = path.dirname(filePath);
+          // Track which dirs we need to create
+          file._createdDirs = [];
+          let current = dir;
+          while (current !== directory && current !== path.dirname(current) && !fs.existsSync(current)) {
+            file._createdDirs.unshift(current);
+            current = path.dirname(current);
+          }
+          if (file._createdDirs.length > 0) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+          fs.writeFileSync(filePath, substituteVariables(file.content, testParams));
         } catch (e) {
           console.log(`Cannot write file ${directory}/${file.name}`.red);
         }
       });
 
       afterEach(() => {
-        fs.unlinkSync(`${directory}/${file.name}`);
+        try {
+          fs.unlinkSync(`${directory}/${file.name}`);
+        } catch (e) {
+          // ignore if already deleted
+        }
+        // Delete only dirs we created, deepest first
+        for (const d of (file._createdDirs || []).reverse()) {
+          try { fs.rmdirSync(d); } catch (e) { /* ignore if not empty or already gone */ }
+        }
       });
     });
 
@@ -212,7 +376,10 @@ function createScenario(index, scenario, directory, prefix = "") {
 
     (scenario.tests || []).forEach((test, index) => {
       const testFunction = async () => {
+        const startTime = Date.now();
         const { stdout, stderr, exitCode } = await executeCommand(substituteVariables(test.execute, testParams), directory);
+        const scores = [];
+        let passed = true;
 
         // Check for command failure first and show meaningful error message
         if (exitCode !== 0 && (!test.errors || test.errors.length === 0)) {
@@ -223,8 +390,64 @@ function createScenario(index, scenario, directory, prefix = "") {
 
         if (test.expects && test.expects.length > 0) {
           for (const expectObj of test.expects) {
+            // expect:ai:score — LLM scoring
+            if (expectObj.expectScore && expectObj.expectAi) {
+              const scoreResult = await validateWithScore(stdout, expectObj.scoreEval, expectObj.scoreRange);
+              const scorePassed = scoreResult.score >= expectObj.scorePass;
+              const scoreLabel = expectObj.scoreName ? `${expectObj.scoreName}: ` : 'score: ';
+              console.log(`  ${scoreLabel}${scoreResult.score}/${scoreResult.max}  ${scoreResult.reason}`[scorePassed ? 'green' : 'red']);
+              const scoreEntry = {
+                type: "ai:score",
+                eval: expectObj.scoreEval,
+                score: scoreResult.score,
+                max: scoreResult.max,
+                pass: expectObj.scorePass,
+                reason: scoreResult.reason
+              };
+              if (expectObj.scoreName) scoreEntry.name = expectObj.scoreName;
+              scores.push(scoreEntry);
+              if (!scorePassed) passed = false;
+              expect(scoreResult.score).toBeGreaterThanOrEqual(expectObj.scorePass);
+              continue;
+            }
+
+            // expect:similar — deterministic text similarity
+            if (expectObj.expectSimilar) {
+              let reference = expectObj.similarContent;
+              if (expectObj.similarFile) {
+                const refPath = path.resolve(directory, expectObj.similarFile);
+                reference = fs.readFileSync(refPath, "utf-8");
+              }
+              let actualValue = stdout;
+              let refValue = reference;
+              if (expectObj.expectIgnoreCase) {
+                actualValue = actualValue.toLowerCase();
+                refValue = refValue.toLowerCase();
+              }
+              const rawSimilarity = computeSimilarity(expectObj.similarMetric, actualValue, refValue);
+              const similarity = Math.round(rawSimilarity * 10000) / 10000;
+              const simPassed = similarity >= expectObj.similarPass;
+              const simRounded = Math.round(similarity * 100) / 100;
+              const simLabel = expectObj.similarName ? `${expectObj.similarName}: ` : 'similarity: ';
+              console.log(`  ${simLabel}${simRounded} (${expectObj.similarMetric})  ${simPassed ? '✓ PASS' : '✗ FAIL'} (>= ${expectObj.similarPass})`[simPassed ? 'green' : 'red']);
+              const simEntry = {
+                type: "similar",
+                metric: expectObj.similarMetric,
+                score: simRounded,
+                pass: expectObj.similarPass
+              };
+              if (expectObj.similarName) simEntry.name = expectObj.similarName;
+              scores.push(simEntry);
+              if (!simPassed) passed = false;
+              expect(similarity).toBeGreaterThanOrEqual(expectObj.similarPass);
+              continue;
+            }
+
+            // expect:ai — pass/fail AI validation
             if (expectObj.expectAi) {
               const aiResult = await validateWithAi(stdout, expectObj.expect);
+              scores.push({ type: "ai", eval: expectObj.expect, passed: aiResult.valid, reason: aiResult.reason });
+              if (!aiResult.valid) passed = false;
               expect(aiResult.valid).toBe(true);
               continue;
             }
@@ -240,12 +463,14 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
             }
 
+            let expectPassed = false;
             if (expectObj.expectRegex) {
               let flags = "";
               if (expectObj.expectIgnoreCase) {
                 flags += "i";
               }
               const regex = new RegExp(expectedValue, flags);
+              expectPassed = regex.test(actualValue);
               expect(actualValue).toMatch(regex);
             } else {
               if (expectObj.expectIgnoreCase) {
@@ -263,14 +488,21 @@ function createScenario(index, scenario, directory, prefix = "") {
                     .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
                     .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
+                  expectPassed = regex.test(actualValue);
                   expect(actualValue).toMatch(regex);
                 } else {
+                  expectPassed = actualValue.includes(expectedValue);
                   expect(actualValue).toContain(expectedValue);
                 }
               } else {
+                expectPassed = actualValue === expectedValue;
                 expect(actualValue).toEqual(expectedValue);
               }
             }
+
+            const expectType = expectObj.expectRegex ? "regex" : expectObj.expectPartial ? "partial" : expectObj.expectJson ? "json" : "exact";
+            scores.push({ type: expectType, passed: expectPassed });
+            if (!expectPassed) passed = false;
           }
         }
 
@@ -278,6 +510,8 @@ function createScenario(index, scenario, directory, prefix = "") {
           for (const errorObj of test.errors) {
             if (errorObj.errorAi) {
               const aiResult = await validateWithAi(stderr, errorObj.error);
+              scores.push({ type: "error:ai", eval: errorObj.error, passed: aiResult.valid, reason: aiResult.reason });
+              if (!aiResult.valid) passed = false;
               expect(aiResult.valid).toBe(true);
               continue;
             }
@@ -293,12 +527,14 @@ function createScenario(index, scenario, directory, prefix = "") {
               }
             }
 
+            let errorPassed = false;
             if (errorObj.errorRegex) {
               let flags = "";
               if (errorObj.errorIgnoreCase) {
                 flags += "i";
               }
               const regex = new RegExp(expectedError, flags);
+              errorPassed = regex.test(actualError);
               expect(actualError).toMatch(regex);
             } else {
               if (errorObj.errorIgnoreCase) {
@@ -316,20 +552,39 @@ function createScenario(index, scenario, directory, prefix = "") {
                     .replace(/\\\*\\\?/g, '.*?')           // Convert *? to .*? (non-greedy match)
                     .replace(/\\\*/g, '.*');               // Convert * to .* (greedy match)
                   const regex = new RegExp(regexPattern);
+                  errorPassed = regex.test(actualError);
                   expect(actualError).toMatch(regex);
                 } else {
+                  errorPassed = actualError.includes(expectedError);
                   expect(actualError).toContain(expectedError);
                 }
               } else {
+                errorPassed = actualError === expectedError;
                 expect(actualError).toEqual(expectedError);
               }
             }
+
+            const errorType = "error:" + (errorObj.errorRegex ? "regex" : errorObj.errorPartial ? "partial" : errorObj.errorJson ? "json" : "exact");
+            scores.push({ type: errorType, passed: errorPassed });
+            if (!errorPassed) passed = false;
           }
+        }
+
+        // Record results for --output JSON
+        if (OUTPUT_FILE) {
+          const entry = {
+            title: test.title || `${index + 1}. should print output`,
+            passed,
+            duration: Date.now() - startTime
+          };
+          if (scores.length > 0) entry.results = scores;
+          testResults.push(entry);
         }
       };
 
       const hasAi = (test.expects || []).some(e => e.expectAi) || (test.errors || []).some(e => e.errorAi);
-      const timeout = test.timeout || (hasAi ? AI_TIMEOUT : undefined);
+      const hasScore = (test.expects || []).some(e => e.expectScore);
+      const timeout = test.timeout || (hasAi || hasScore ? AI_TIMEOUT : undefined);
 
       if (timeout) {
         it(`${test.title || `${index + 1}. should print output`}`, testFunction, timeout);
