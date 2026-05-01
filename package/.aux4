@@ -10,9 +10,7 @@
     "test",
     "testing"
   ],
-  "dependencies": [
-    "aux4/config"
-  ],
+  "dependencies": [],
   "system": [
     [
       "test:node --version",
