@@ -170,6 +170,20 @@ function parseWithMarked(scenario) {
           pendingTimeout = timeoutValue;
         }
       }
+    } else if (language === 'dataset' || language.startsWith('dataset:')) {
+      // Dataset block: inline JSON array or config with file reference
+      if (language.startsWith('dataset:')) {
+        // dataset:file.json syntax — file path directly in the language tag
+        const filePath = language.substring(8).trim();
+        scenario.dataset = { file: filePath };
+      } else {
+        // Inline dataset block — parse key-value config
+        const config = parseKeyValueBlock(content);
+        scenario.dataset = {};
+        if (config.file) scenario.dataset.file = config.file;
+        if (config.root) scenario.dataset.root = config.root;
+        if (config.key) scenario.dataset.key = config.key;
+      }
     } else if (language === 'execute') {
       // Start a new test
       currentTest = {

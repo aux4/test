@@ -14,6 +14,12 @@
 - multiple-expects-test.test.md
 - substitute-variables.test.md
 - timeout.test.md
+- dataset-basic.test.md
+- dataset-root.test.md
+- dataset-nested.test.md
+- dataset-key.test.md
+- dataset-objects.test.md
+- dataset-file-syntax.test.md
 
 ## ai (optional)
 - expect-ai.test.md

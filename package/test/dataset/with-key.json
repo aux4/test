@@ -1,0 +1,4 @@
+[
+  {"id": "addition", "a": 3, "b": 4, "result": "7"},
+  {"id": "subtraction-like", "a": 10, "b": -3, "result": "7"}
+]

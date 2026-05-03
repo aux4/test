@@ -1,0 +1,8 @@
+{
+  "data": {
+    "items": [
+      {"name": "Alice", "greeting": "Hello, Alice!"},
+      {"name": "Bob", "greeting": "Hello, Bob!"}
+    ]
+  }
+}

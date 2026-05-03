@@ -1,0 +1,4 @@
+[
+  {"input": {"name": "Alice", "age": 30}, "expected": "{\"name\":\"Alice\",\"age\":30}"},
+  {"input": {"name": "Bob", "age": 25}, "expected": "{\"name\":\"Bob\",\"age\":25}"}
+]

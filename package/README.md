@@ -813,6 +813,129 @@ The JSON includes all test results with scores and assertion outcomes:
 
 ---
 
+## Datasets — Data-Driven Tests
+
+The `dataset` block runs an entire scenario (including nested children) once per entry in a JSON array, similar to Jest's `it.each`. Variables from each dataset entry are substituted into `execute`, `expect`, `error`, `file`, and hook blocks using `{{variable}}` syntax.
+
+Two syntax forms are supported:
+
+**Config block** (with options):
+
+````markdown
+## should add numbers
+
+```dataset
+file: dataset/math.json
+root: $.data.items
+key: id
+```
+
+```execute
+echo $(({{a}} + {{b}}))
+```
+
+```expect
+{{result}}
+```
+````
+
+**Shorthand** (file path in the language tag):
+
+````markdown
+## should add numbers
+
+```dataset:dataset/math.json
+```
+
+```execute
+echo $(({{a}} + {{b}}))
+```
+
+```expect
+{{result}}
+```
+````
+
+Where `dataset/math.json` contains:
+
+```json
+[
+  {"a": 1, "b": 2, "result": "3"},
+  {"a": 10, "b": 20, "result": "30"}
+]
+```
+
+### Dataset Block Fields
+
+- `file` — path to a JSON file (resolved relative to the test file's directory)
+- `root` — JSONPath expression to extract an array from the JSON structure (default: `$`, the root). Use when the array is nested inside the JSON, e.g., `$.data.items`
+- `key` — field name from each entry to use as the label in test output. When set, entries appear as `[keyValue]` instead of `[#0]`, `[#1]`, etc.
+
+### How It Works
+
+- The `dataset` block is placed at a scenario heading level (e.g., `##`). The entire `describe` for that scenario — including all its tests and nested children — is repeated once per dataset entry.
+- Dataset variables are merged with config params (`--config`). **Dataset values override config values** when keys collide.
+- Object and array values in dataset entries are automatically `JSON.stringify`'d for substitution.
+- `null`/`undefined` values become empty strings.
+- Empty datasets skip the scenario with a warning.
+- Non-array data (after `root` resolution) produces an error.
+
+### Nested Datasets (Cartesian Product)
+
+When a child scenario also has a `dataset` block, the result is a cartesian product — every combination runs:
+
+````markdown
+## should combine greetings
+
+```dataset
+file: dataset/prefixes.json
+```
+
+### should greet
+
+```dataset
+file: dataset/names.json
+```
+
+```execute
+echo "{{prefix}}, {{name}}!"
+```
+
+```expect:partial
+{{prefix}}, {{name}}!
+```
+````
+
+With `prefixes.json` = `[{"prefix":"Hello"},{"prefix":"Hi"}]` and `names.json` = `[{"name":"Alice"},{"name":"Bob"}]`, this runs 4 tests (2 x 2).
+
+The child dataset entries are merged on top of the parent's, so inner variables can override outer ones.
+
+### Test Output
+
+Each dataset entry appears as a separate `describe` block in test output:
+
+```text
+1.1. should add numbers [#0]
+  ✓ 1. should print output
+1.1. should add numbers [#1]
+  ✓ 1. should print output
+```
+
+With `key: id`:
+
+```text
+1.1. should add numbers [addition]
+  ✓ 1. should print output
+1.1. should add numbers [subtraction-like]
+  ✓ 1. should print output
+```
+
+### Hooks with Datasets
+
+`beforeAll`, `afterAll`, `beforeEach`, and `afterEach` hooks inside a dataset scenario run per entry — each entry gets its own `describe` block, so `beforeAll` runs once per entry, not once globally.
+
+---
+
 ## Nested File Paths
 
 `file:` blocks automatically create parent directories if they don't exist, and clean up only the directories that were created:
@@ -865,6 +988,12 @@ The provided test files in this package demonstrate all primary features:
 - test/expect-ai-score.test.md — LLM-as-a-judge scoring
 - test/output-json.test.md — JSON output flag
 - test/file-nested-path.test.md — nested directory creation for file blocks
+- test/dataset-basic.test.md — basic dataset-driven tests
+- test/dataset-root.test.md — dataset with JSONPath root
+- test/dataset-nested.test.md — nested datasets (cartesian product)
+- test/dataset-key.test.md — dataset with key field for labels
+- test/dataset-objects.test.md — dataset with object values
+- test/dataset-file-syntax.test.md — dataset:file shorthand syntax
 
 You can open each file to see complete, runnable test fragments. The README examples above copy the real tests so you can replicate them.
 

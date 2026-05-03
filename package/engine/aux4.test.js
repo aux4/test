@@ -6,6 +6,7 @@ const childProcess = require("child_process");
 const MarkdownTestParser = require("./MarkdownTestParser");
 const { executeCommand, substituteVariables } = require("./TestUtils");
 const { computeSimilarity } = require("./Similarity");
+const { JSONPath } = require("jsonpath-plus");
 
 const AI_CONFIG = process.env.AUX4_TEST_AI_CONFIG || "";
 const CONFIG_FILE = process.env.AUX4_TEST_CONFIG_FILE || "";
@@ -268,6 +269,57 @@ function cleanup(tmpDir) {
   }
 }
 
+function loadDataset(dataset, directory) {
+  let data;
+  if (dataset.file) {
+    const filePath = path.resolve(directory, dataset.file);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Dataset file not found: ${filePath}`);
+    }
+    const raw = fs.readFileSync(filePath, "utf-8");
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(`Dataset file is not valid JSON: ${filePath}`);
+    }
+  } else {
+    throw new Error("Dataset block requires a 'file' field pointing to a JSON file");
+  }
+
+  if (dataset.root) {
+    const results = JSONPath({ path: dataset.root, json: data });
+    if (!results || results.length === 0) {
+      throw new Error(`Dataset root path "${dataset.root}" resolved to nothing`);
+    }
+    data = results.length === 1 ? results[0] : results;
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error(`Dataset must resolve to an array, got ${typeof data}`);
+  }
+
+  if (data.length === 0) {
+    console.warn(`⚠ Dataset is empty (${dataset.file || "inline"}), skipping tests`.yellow);
+    return [];
+  }
+
+  return data;
+}
+
+function mergeParams(baseParams, datasetEntry) {
+  const merged = { ...baseParams };
+  for (const [key, value] of Object.entries(datasetEntry)) {
+    if (value === null || value === undefined) {
+      merged[key] = "";
+    } else if (typeof value === "object") {
+      merged[key] = JSON.stringify(value);
+    } else {
+      merged[key] = String(value);
+    }
+  }
+  return merged;
+}
+
 const files = process.env.AUX4_TEST_FILES || "";
 let testParams = {};
 try {
@@ -318,8 +370,44 @@ if (OUTPUT_FILE) {
   });
 }
 
-function createScenario(index, scenario, directory, prefix = "") {
-  describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
+function createScenario(index, scenario, directory, prefix = "", parentParams = null) {
+  const effectiveParams = parentParams || testParams;
+
+  if (scenario.dataset) {
+    // Dataset scenario: load data and create a describe per entry
+    let entries;
+    try {
+      entries = loadDataset(scenario.dataset, directory);
+    } catch (e) {
+      describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
+        it('should load dataset', () => { throw e; });
+      });
+      return;
+    }
+
+    if (entries.length === 0) {
+      // Empty dataset — skip
+      return;
+    }
+
+    const keyField = scenario.dataset.key;
+
+    entries.forEach((entry, entryIndex) => {
+      const entryLabel = keyField && entry[keyField] != null ? String(entry[keyField]) : `#${entryIndex}`;
+      const entryParams = mergeParams(effectiveParams, entry);
+
+      describe(`${prefix}${index + 1}. ${scenario.title} [${entryLabel}]`, () => {
+        createScenarioBody(index, scenario, directory, prefix, entryParams);
+      });
+    });
+  } else {
+    describe(`${prefix}${index + 1}. ${scenario.title}`, () => {
+      createScenarioBody(index, scenario, directory, prefix, effectiveParams);
+    });
+  }
+}
+
+function createScenarioBody(index, scenario, directory, prefix, params) {
     (scenario.files || []).forEach(file => {
       beforeEach(() => {
         try {
@@ -335,7 +423,7 @@ function createScenario(index, scenario, directory, prefix = "") {
           if (file._createdDirs.length > 0) {
             fs.mkdirSync(dir, { recursive: true });
           }
-          fs.writeFileSync(filePath, substituteVariables(file.content, testParams));
+          fs.writeFileSync(filePath, substituteVariables(file.content, params));
         } catch (e) {
           console.log(`Cannot write file ${directory}/${file.name}`.red);
         }
@@ -362,7 +450,7 @@ function createScenario(index, scenario, directory, prefix = "") {
     ].forEach(({ list, method }) => {
       list.forEach(cmd => {
         method(async () => {
-          const { stdout, stderr } = await executeCommand(substituteVariables(cmd, testParams), directory);
+          const { stdout, stderr } = await executeCommand(substituteVariables(cmd, params), directory);
           if (stderr) {
             console.log(stderr.red);
           }
@@ -374,10 +462,10 @@ function createScenario(index, scenario, directory, prefix = "") {
       });
     });
 
-    (scenario.tests || []).forEach((test, index) => {
+    (scenario.tests || []).forEach((test, testIndex) => {
       const testFunction = async () => {
         const startTime = Date.now();
-        const { stdout, stderr, exitCode } = await executeCommand(substituteVariables(test.execute, testParams), directory);
+        const { stdout, stderr, exitCode } = await executeCommand(substituteVariables(test.execute, params), directory);
         const scores = [];
         let passed = true;
 
@@ -452,7 +540,7 @@ function createScenario(index, scenario, directory, prefix = "") {
               continue;
             }
 
-            let expectedValue = substituteVariables(expectObj.expect, testParams);
+            let expectedValue = substituteVariables(expectObj.expect, params);
             let actualValue = stdout;
 
             if (expectObj.expectJson) {
@@ -516,7 +604,7 @@ function createScenario(index, scenario, directory, prefix = "") {
               continue;
             }
 
-            let expectedError = substituteVariables(errorObj.error, testParams);
+            let expectedError = substituteVariables(errorObj.error, params);
             let actualError = stderr;
 
             if (errorObj.errorJson) {
@@ -573,7 +661,7 @@ function createScenario(index, scenario, directory, prefix = "") {
         // Record results for --output JSON
         if (OUTPUT_FILE) {
           const entry = {
-            title: test.title || `${index + 1}. should print output`,
+            title: test.title || `${testIndex + 1}. should print output`,
             passed,
             duration: Date.now() - startTime
           };
@@ -587,14 +675,13 @@ function createScenario(index, scenario, directory, prefix = "") {
       const timeout = test.timeout || (hasAi || hasScore ? AI_TIMEOUT : undefined);
 
       if (timeout) {
-        it(`${test.title || `${index + 1}. should print output`}`, testFunction, timeout);
+        it(`${test.title || `${testIndex + 1}. should print output`}`, testFunction, timeout);
       } else {
-        it(`${test.title || `${index + 1}. should print output`}`, testFunction);
+        it(`${test.title || `${testIndex + 1}. should print output`}`, testFunction);
       }
     });
 
     scenario.children.forEach((child, childIndex) => {
-      createScenario(childIndex, child, directory, `${prefix}${index + 1}.`);
+      createScenario(childIndex, child, directory, `${prefix}${index + 1}.`, params);
     });
-  });
 }
