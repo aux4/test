@@ -415,7 +415,7 @@ Quick command
 ```
 ````
 
-More examples in the same file show `5000` and `10000` millisecond timeouts. If no `timeout` block is present, the runner uses the default test framework timeout (e.g., Jest default).
+More examples in the same file show `5000` and `10000` millisecond timeouts. If no `timeout` block is present, the runner uses the default timeout.
 
 Practical notes:
 
