@@ -2,6 +2,7 @@
 
 const TestCommand = require("./command/TestExecutor");
 const TestEditor = require("./command/TestEditor");
+const CoverageReport = require("../lib/CoverageReport");
 
 process.title = "aux4-test";
 
@@ -10,6 +11,7 @@ process.title = "aux4-test";
   if (args.length === 0) {
     console.log("       run   <files> run test");
     console.log("  coverage   <files> run test with coverage");
+    console.log("    report   <file>  render coverage report from JSON file");
     process.exit(0);
   }
 
@@ -72,6 +74,77 @@ process.title = "aux4-test";
         await TestCommand.run(testFileDir, files, params);
         break;
       }
+      case "coverage": {
+        const testFileDir = args[1];
+        const remaining = args.slice(2);
+
+        const AUX4_INTERNAL = new Set(["packageDir", "aux4HomeDir", "configDir", "dir", "config", "configFile", "group"]);
+        let params = {};
+        let files = remaining;
+
+        if (remaining.length > 0) {
+          const lastArg = remaining[remaining.length - 1];
+          if (lastArg.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(lastArg);
+              if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                const configFile = parsed.configFile;
+                const configSection = parsed.config;
+                if (configFile && configSection) {
+                  try {
+                    const cp = require("child_process");
+                    const configOutput = cp.execSync(
+                      `aux4 config get --file "${configFile}" ${configSection}`,
+                      { encoding: "utf-8", timeout: 5000 }
+                    ).trim();
+                    if (configOutput) {
+                      const configValues = JSON.parse(configOutput);
+                      if (configValues && typeof configValues === "object" && !Array.isArray(configValues)) {
+                        for (const [key, value] of Object.entries(configValues)) {
+                          params[key] = typeof value === "string" ? value : JSON.stringify(value);
+                        }
+                      }
+                    }
+                  } catch {
+                    // Config resolution failed, continue without config params
+                  }
+                }
+                for (const [key, value] of Object.entries(parsed)) {
+                  if (!AUX4_INTERNAL.has(key)) {
+                    params[key] = value;
+                  }
+                }
+
+                if (parsed.configFile) process.env.AUX4_TEST_CONFIG_FILE = parsed.configFile;
+                if (parsed.aiConfig) process.env.AUX4_TEST_AI_CONFIG = parsed.aiConfig;
+                if (parsed.group) process.env.AUX4_TEST_GROUP = parsed.group;
+                if (parsed.output) process.env.AUX4_TEST_OUTPUT = parsed.output;
+              }
+            } catch {
+              // Not valid JSON, treat as file path
+            }
+            files = remaining.slice(0, -1);
+          }
+        }
+
+        const os = require("os");
+        const path = require("path");
+        const coverageFile = path.join(os.tmpdir(), `aux4-coverage-${process.pid}.json`);
+        process.env.AUX4_COVERAGE_FILE = coverageFile;
+
+        try {
+          await TestCommand.run(testFileDir, files, params);
+        } catch {
+          // Tests may fail, still show coverage
+        }
+
+        CoverageReport.generate(coverageFile, process.cwd());
+
+        // Cleanup
+        try { require("fs").unlinkSync(coverageFile); } catch {}
+        try { require("fs").unlinkSync(coverageFile + ".lock"); } catch {}
+        break;
+      }
       case "add": {
         const [, testFile, level, name, file, execute] = args;
         if (!testFile || !name) {
@@ -90,6 +163,16 @@ process.title = "aux4-test";
         }
         const params = { testFile, name, dir };
         await TestEditor.inspectTest(params);
+        break;
+      }
+      case "report": {
+        const coverageFile = args[1];
+        const targetDir = args[2] || process.cwd();
+        if (!coverageFile) {
+          console.error("Usage: report <coverageFile> [dir]");
+          process.exit(1);
+        }
+        CoverageReport.generate(coverageFile, targetDir);
         break;
       }
       default:

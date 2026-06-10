@@ -84,6 +84,70 @@
           }
         },
         {
+          "name": "coverage",
+          "execute": [
+            "node ${packageDir}/lib/aux4-test.js coverage ${packageDir} ${dir} value(*)"
+          ],
+          "help": {
+            "text": "Run aux4 tests with coverage report",
+            "variables": [
+              {
+                "name": "dir",
+                "text": "The directory to run the tests in",
+                "default": ".",
+                "arg": true
+              },
+              {
+                "name": "configFile",
+                "text": "Path to the config file",
+                "default": ""
+              },
+              {
+                "name": "config",
+                "text": "Config section name",
+                "default": ""
+              },
+              {
+                "name": "aiConfig",
+                "text": "Config section for AI agent (used by expect:ai/error:ai)",
+                "default": ""
+              },
+              {
+                "name": "group",
+                "text": "Run only tests from the specified group(s)",
+                "default": "",
+                "multiple": true
+              },
+              {
+                "name": "output",
+                "text": "Write structured JSON results to this file",
+                "default": ""
+              }
+            ]
+          }
+        },
+        {
+          "name": "report",
+          "execute": [
+            "node ${packageDir}/lib/aux4-test.js report ${file} ${dir}"
+          ],
+          "help": {
+            "text": "Render coverage report from a JSON coverage file",
+            "variables": [
+              {
+                "name": "file",
+                "text": "Path to the coverage JSON file",
+                "arg": true
+              },
+              {
+                "name": "dir",
+                "text": "Directory to scan for .aux4 files",
+                "default": "."
+              }
+            ]
+          }
+        },
+        {
           "name": "add",
           "execute": [
             "node ${packageDir}/lib/aux4-test.js add values(testFile, level, name, file*, execute)"

@@ -32,12 +32,14 @@ aux4 test run .
 
 This scans for `.test.md` files in the directory structure and runs them using the aux4 test runner. By default the runner uses the directory "."; you may pass another directory as the positional dir variable.
 
-The package provides two primary commands:
+The package provides these primary commands:
 
 - aux4 test run — run tests (link: ./commands/test/run)
+- aux4 test coverage — run tests with coverage report (link: ./commands/test/coverage)
+- aux4 test report — render coverage report from JSON file (link: ./commands/test/report)
 - aux4 test add — add test entries to a test file (link: ./commands/test/add)
 
-See command docs: [aux4 test run](./commands/test/run) and [aux4 test add](./commands/test/add).
+See command docs: [aux4 test run](./commands/test/run), [aux4 test coverage](./commands/test/coverage), [aux4 test report](./commands/test/report), and [aux4 test add](./commands/test/add).
 
 ---
 
@@ -813,6 +815,84 @@ The JSON includes all test results with scores and assertion outcomes:
 
 ---
 
+## Coverage — Step-Level Instrumentation
+
+aux4/test includes a coverage system that tracks which execute steps, branches, and loop iterations were exercised during test runs or regular command usage.
+
+### Running Tests with Coverage
+
+```bash
+aux4 test coverage test/
+```
+
+This runs all tests normally, then prints a coverage report showing which commands and execute steps were hit:
+
+```text
+Coverage Report
+======================================================================
+
+  Package: my-app@1.0.0
+
+    main/build          3/3 steps  ████████████ 100%  1.2s
+    main/deploy         2/5 steps  █████░░░░░░░  40%  0.3s
+      ✗ [2] when:${env}=prod:nout:backup-db
+      ✗ [3] nout:notify-slack ${env}
+      ✗ [4] log:deployed to ${env}
+
+----------------------------------------------------------------------
+
+  Summary:
+    Commands:   2/3 (67%)
+    Steps:      5/8 (63%)
+    Branches:   1/2 (50%)
+
+  Slowest commands:
+    main/build          1.2s
+    main/deploy         0.3s
+
+======================================================================
+```
+
+### Coverage Metrics
+
+| Metric | What it tracks |
+|--------|---------------|
+| **Step coverage** | Which execute items in each command were hit |
+| **Command coverage** | Which commands were invoked at least once |
+| **Branch coverage** | Which `when:` conditions were evaluated as both true and false |
+| **Iteration tracking** | How many times `each:` loops ran and per-iteration durations |
+| **Duration** | Time per step, command, and iteration |
+
+### Standalone Usage with AUX4_COVERAGE_FILE
+
+Coverage instrumentation is built into the aux4 core. Set the `AUX4_COVERAGE_FILE` environment variable to record coverage from any `aux4` command:
+
+```bash
+# Record coverage from regular commands
+AUX4_COVERAGE_FILE=cov.json aux4 build
+AUX4_COVERAGE_FILE=cov.json aux4 deploy --env staging
+
+# Multiple runs merge into the same file
+AUX4_COVERAGE_FILE=cov.json aux4 deploy --env prod
+
+# View the report
+aux4 test report cov.json
+```
+
+When `AUX4_COVERAGE_FILE` is not set, coverage is completely disabled with zero performance overhead.
+
+### Viewing a Coverage Report
+
+```bash
+aux4 test report <coverage-file> [--dir <path>]
+```
+
+The `report` command reads a coverage JSON file and scans the specified directory for `.aux4` files to build the full universe of commands, then renders which were covered and which were missed.
+
+See command docs: [aux4 test coverage](./commands/test/coverage) and [aux4 test report](./commands/test/report).
+
+---
+
 ## Datasets — Data-Driven Tests
 
 The `dataset` block runs an entire scenario (including nested children) once per entry in a JSON array, similar to Jest's `it.each`. Variables from each dataset entry are substituted into `execute`, `expect`, `error`, `file`, and hook blocks using `{{variable}}` syntax.
@@ -987,6 +1067,7 @@ The provided test files in this package demonstrate all primary features:
 - test/expect-similar.test.md — text similarity matching (fuzzy, cosine, jaccard)
 - test/expect-ai-score.test.md — LLM-as-a-judge scoring
 - test/output-json.test.md — JSON output flag
+- test/coverage.test.md — coverage report rendering and JSON format
 - test/file-nested-path.test.md — nested directory creation for file blocks
 - test/dataset-basic.test.md — basic dataset-driven tests
 - test/dataset-root.test.md — dataset with JSONPath root
