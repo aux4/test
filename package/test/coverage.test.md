@@ -242,3 +242,55 @@ main/hello
 ```expect:partial
 0/1 steps
 ```
+
+## threshold enforcement
+
+```file:coverage-threshold.json
+{
+  "timestamp": "2026-06-09T12:00:00Z",
+  "steps": [
+    {
+      "package": "test/app@1.0.0",
+      "profile": "main",
+      "command": "build",
+      "index": 0,
+      "step": "echo building",
+      "hits": 1,
+      "durations": [5]
+    },
+    {
+      "package": "test/app@1.0.0",
+      "profile": "main",
+      "command": "build",
+      "index": 1,
+      "step": "echo done",
+      "hits": 0,
+      "durations": []
+    }
+  ]
+}
+```
+
+```afterAll
+rm -f coverage-threshold.json
+```
+
+### should pass when coverage meets threshold
+
+```execute
+node ../lib/aux4-test.js report coverage-threshold.json . 50
+```
+
+```expect:partial
+Coverage Report
+```
+
+### should fail when coverage is below threshold
+
+```execute
+node ../lib/aux4-test.js report coverage-threshold.json . 80
+```
+
+```error:partial
+Coverage 50% is below threshold 80%
+```

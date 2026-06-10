@@ -20,6 +20,7 @@
 - dataset-key.test.md
 - dataset-objects.test.md
 - dataset-file-syntax.test.md
+- coverage.test.md
 
 ## ai (optional)
 - expect-ai.test.md

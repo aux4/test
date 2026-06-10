@@ -138,11 +138,13 @@ process.title = "aux4-test";
           // Tests may fail, still show coverage
         }
 
-        CoverageReport.generate(coverageFile, process.cwd());
+        const threshold = parseInt(params.threshold || "0", 10);
+        const passed = CoverageReport.generate(coverageFile, process.cwd(), threshold);
 
         // Cleanup
         try { require("fs").unlinkSync(coverageFile); } catch {}
         try { require("fs").unlinkSync(coverageFile + ".lock"); } catch {}
+        if (!passed) process.exit(1);
         break;
       }
       case "add": {
@@ -168,11 +170,13 @@ process.title = "aux4-test";
       case "report": {
         const coverageFile = args[1];
         const targetDir = args[2] || process.cwd();
+        const reportThreshold = parseInt(args[3] || "0", 10);
         if (!coverageFile) {
-          console.error("Usage: report <coverageFile> [dir]");
+          console.error("Usage: report <coverageFile> [dir] [threshold]");
           process.exit(1);
         }
-        CoverageReport.generate(coverageFile, targetDir);
+        const reportPassed = CoverageReport.generate(coverageFile, targetDir, reportThreshold);
+        if (!reportPassed) process.exit(1);
         break;
       }
       default:

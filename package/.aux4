@@ -122,6 +122,11 @@
                 "name": "output",
                 "text": "Write structured JSON results to this file",
                 "default": ""
+              },
+              {
+                "name": "threshold",
+                "text": "Minimum step coverage percentage (0-100). Fails if below.",
+                "default": "0"
               }
             ]
           }
@@ -129,7 +134,7 @@
         {
           "name": "report",
           "execute": [
-            "node ${packageDir}/lib/aux4-test.js report ${file} ${dir}"
+            "node ${packageDir}/lib/aux4-test.js report ${file} ${dir} ${threshold}"
           ],
           "help": {
             "text": "Render coverage report from a JSON coverage file",
@@ -143,6 +148,11 @@
                 "name": "dir",
                 "text": "Directory to scan for .aux4 files",
                 "default": "."
+              },
+              {
+                "name": "threshold",
+                "text": "Minimum step coverage percentage (0-100). Fails if below.",
+                "default": "0"
               }
             ]
           }
