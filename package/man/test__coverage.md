@@ -15,10 +15,11 @@ Under the hood, the command sets `AUX4_COVERAGE_FILE` to a temporary file, runs 
 #### Usage
 
 ```bash
-aux4 test coverage <dir> [--configFile <path>] [--config <section>] [--aiConfig <section>] [--group <name>] [--output <file>]
+aux4 test coverage <dir> [--threshold <n>] [--configFile <path>] [--config <section>] [--aiConfig <section>] [--group <name>] [--output <file>]
 ```
 
 --dir         Directory or file with .test.md files (default: `.`)
+--threshold   Minimum step coverage percentage (0-100). Exits with code 1 if below. (default: `0` — no threshold)
 --configFile  Path to config file for variable substitution
 --config      Config section name
 --aiConfig    Config section for AI agent (used by `expect:ai` and `expect:ai:score`)
@@ -30,6 +31,9 @@ aux4 test coverage <dir> [--configFile <path>] [--config <section>] [--aiConfig 
 ```bash
 # Run tests with coverage
 aux4 test coverage test/
+
+# Fail if coverage is below 80%
+aux4 test coverage test/ --threshold 80
 
 # Run specific tests with coverage
 aux4 test coverage test/my-feature.test.md

@@ -7,11 +7,12 @@ The report scans the specified directory for `.aux4` files to build the full uni
 #### Usage
 
 ```bash
-aux4 test report <file> [--dir <path>]
+aux4 test report <file> [--dir <path>] [--threshold <n>]
 ```
 
---file  Path to the coverage JSON file (required)
---dir   Directory to scan for .aux4 files (default: `.`)
+--file       Path to the coverage JSON file (required)
+--dir        Directory to scan for .aux4 files (default: `.`)
+--threshold  Minimum step coverage percentage (0-100). Exits with code 1 if below. (default: `0` — no threshold)
 
 #### Example
 
@@ -22,6 +23,9 @@ AUX4_COVERAGE_FILE=cov.json aux4 test run .
 
 # View the report
 aux4 test report cov.json
+
+# Fail if coverage is below 80%
+aux4 test report cov.json --threshold 80
 
 # Scan a different directory for .aux4 files
 aux4 test report cov.json --dir ./packages/my-app

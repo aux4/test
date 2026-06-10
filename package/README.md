@@ -881,10 +881,28 @@ aux4 test report cov.json
 
 When `AUX4_COVERAGE_FILE` is not set, coverage is completely disabled with zero performance overhead.
 
+### Enforcing a Coverage Threshold
+
+Use `--threshold` to fail with exit code 1 if step coverage is below the specified percentage:
+
+```bash
+# Fail CI if coverage drops below 80%
+aux4 test coverage test/ --threshold 80
+
+# Same for standalone report
+aux4 test report cov.json --threshold 80
+```
+
+When below threshold:
+
+```text
+Coverage 50% is below threshold 80%
+```
+
 ### Viewing a Coverage Report
 
 ```bash
-aux4 test report <coverage-file> [--dir <path>]
+aux4 test report <coverage-file> [--dir <path>] [--threshold <n>]
 ```
 
 The `report` command reads a coverage JSON file and scans the specified directory for `.aux4` files to build the full universe of commands, then renders which were covered and which were missed.
