@@ -449,7 +449,7 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
       { list: scenario.afterEachCommands, method: afterEach }
     ].forEach(({ list, method }) => {
       list.forEach(cmd => {
-        method(async () => {
+        const hook = async () => {
           const { stdout, stderr } = await executeCommand(substituteVariables(cmd, params), directory);
           if (stderr) {
             console.log(stderr.red);
@@ -458,7 +458,14 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
           if (stdout) {
             console.log(stdout);
           }
-        });
+        };
+        // A scenario-level `timeout` block raises the budget for setup/teardown
+        // hooks too (they otherwise get jest's default 5s).
+        if (scenario.timeout) {
+          method(hook, scenario.timeout);
+        } else {
+          method(hook);
+        }
       });
     });
 
@@ -672,7 +679,7 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
 
       const hasAi = (test.expects || []).some(e => e.expectAi) || (test.errors || []).some(e => e.errorAi);
       const hasScore = (test.expects || []).some(e => e.expectScore);
-      const timeout = test.timeout || (hasAi || hasScore ? AI_TIMEOUT : undefined);
+      const timeout = test.timeout || scenario.timeout || (hasAi || hasScore ? AI_TIMEOUT : undefined);
 
       if (timeout) {
         it(`${test.title || `${testIndex + 1}. should print output`}`, testFunction, timeout);

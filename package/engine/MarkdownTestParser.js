@@ -166,8 +166,11 @@ function parseWithMarked(scenario) {
           // Apply timeout to current test
           currentTest.timeout = timeoutValue;
         } else {
-          // Store timeout for next test
+          // Store timeout for the next test, and use it as the scenario-level
+          // budget for setup/teardown hooks (which otherwise get jest's default
+          // 5s) and as the default for the scenario's tests.
           pendingTimeout = timeoutValue;
+          scenario.timeout = timeoutValue;
         }
       }
     } else if (language === 'dataset' || language.startsWith('dataset:')) {
