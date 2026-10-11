@@ -4,6 +4,13 @@ const fs = require("fs");
 // Use marked library from node_modules
 const { marked } = require("marked");
 
+// The full set of `expect:`/`error:` comparison modifiers the engine understands.
+// Any token in an `expect:<token>` suffix that is NOT in this list is treated as a
+// custom block handler name (see `execute:<handler>` / `expect:<handler>` below),
+// not a typo'd modifier. This is the one rule that decides "handler vs modifier" —
+// keep it in sync with the modifiers actually implemented in aux4.test.js.
+const KNOWN_EXPECT_MODIFIERS = ['ignoreCase', 'partial', 'regex', 'json', 'ai', 'score', 'similar'];
+
 class MarkdownTestParser {
   static parse(file) {
     const scenarios = [];
@@ -187,11 +194,19 @@ function parseWithMarked(scenario) {
         if (config.root) scenario.dataset.root = config.root;
         if (config.key) scenario.dataset.key = config.key;
       }
-    } else if (language === 'execute') {
-      // Start a new test
+    } else if (language === 'execute' || language.startsWith('execute:')) {
+      // 'execute' runs the block as a shell command (unchanged, default behavior).
+      // 'execute:<handler>' writes the block content to a temp file and runs a handler
+      // command template over it, so a step can be authored in another language (e.g.
+      // a playbook script) instead of shell. The handler is resolved at run time against
+      // config key `block_<handler>` or a built-in default (see DEFAULT_BLOCK_HANDLERS in
+      // aux4.test.js) — an undefined handler fails the test with a clear message rather
+      // than silently doing nothing.
+      const handler = language.startsWith('execute:') ? language.substring(8).trim() : '';
       currentTest = {
         title: undefined,
         execute: content,
+        executeHandler: handler || undefined,
         expects: [],
         errors: [],
         timeout: pendingTimeout || undefined
@@ -201,8 +216,19 @@ function parseWithMarked(scenario) {
     } else if (language.startsWith('expect')) {
       if (currentTest) {
         const modifiers = language.substring(6); // Remove 'expect'
+
+        // `expect:<handler>` runs the block through a handler (e.g. playbook) and
+        // passes/fails on its exit code, instead of comparing the block content to
+        // stdout. Any suffix token that isn't a KNOWN_EXPECT_MODIFIER is treated as a
+        // handler name — this is a parse-time decision based purely on the token, so a
+        // typo'd modifier (e.g. `expect:partail`) is unambiguously a handler lookup
+        // that fails loudly at run time, never a silently-ignored modifier.
+        const suffixTokens = modifiers.split(':').map(m => m.trim()).filter(Boolean);
+        const handlerTokens = suffixTokens.filter(m => !KNOWN_EXPECT_MODIFIERS.includes(m));
+
         const expectObj = {
           expect: content,
+          expectHandler: handlerTokens.length === 1 ? handlerTokens[0] : undefined,
           expectIgnoreCase: modifiers.includes(':ignoreCase'),
           expectPartial: modifiers.includes(':partial'),
           expectRegex: modifiers.includes(':regex'),
@@ -211,6 +237,13 @@ function parseWithMarked(scenario) {
           expectScore: modifiers.includes(':score'),
           expectSimilar: modifiers.includes(':similar')
         };
+
+        if (handlerTokens.length > 1) {
+          expectObj.expectHandlerError =
+            `Ambiguous expect block 'expect${modifiers}': '${handlerTokens.join("', '")}' are not recognized modifiers. ` +
+            `Known modifiers are: ${KNOWN_EXPECT_MODIFIERS.join(', ')}. If one of these was meant to be a custom block ` +
+            `handler, use a single unknown suffix, e.g. expect:${handlerTokens[0]}.`;
+        }
 
         // Parse expect:ai:score block fields: name, eval, range, pass
         if (expectObj.expectScore) {

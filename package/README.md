@@ -425,6 +425,125 @@ Practical notes:
 - The timeout must be a numeric value in milliseconds.
 - If the command exceeds the timeout, the test fails with a timeout error.
 
+### Timeout Precedence
+
+When a step has a configured handler (see Custom Block Handlers below), several sources can set
+the timeout. The most specific one wins:
+
+1. A `timeout` block placed directly before the `execute`/`expect` block.
+2. A `timeout` block placed at the scenario (`##`) level — also raises the budget for that
+   scenario's `beforeAll`/`afterAll`/`beforeEach`/`afterEach` hooks.
+3. `block_<handler>_timeout` from config — a per-handler default (e.g. browser-driven steps
+   typically need longer than shell commands).
+4. `timeout` from config — a file-wide default.
+5. The built-in 30-second default, only when the test has an `expect:ai` or `expect:ai:score` block.
+
+```yaml
+config:
+  my-section:
+    timeout: 15000              # file-wide default, in ms
+    block_playbook_timeout: 60000  # default for execute:playbook / expect:playbook steps
+```
+
+---
+
+## Custom Block Handlers
+
+Overview:
+
+- `execute:<handler>` and `expect:<handler>` route a block's content through a configured
+  **handler** command instead of running it directly as shell or comparing it to stdout.
+- The block's content (after `{{variable}}` substitution, same as a plain `execute`/`expect`
+  block) is written to a fresh, uniquely-named, owner-only-readable temp file, and the handler's
+  command template is run with that file's path substituted in for `{{file}}`.
+- `execute:<handler>` runs the handler and uses its stdout/stderr/exit code exactly like a plain
+  `execute` block — the usual `expect`/`error` blocks that follow it still apply.
+- `expect:<handler>` runs the handler and passes or fails the test based on its **exit code**,
+  instead of comparing text to stdout. This is useful for keeping assertions in a readable
+  format (e.g. a playbook or natural-language assertion) while the preceding `execute` block only
+  performs actions.
+- The temp file is removed after the handler runs, whether it succeeds, fails, or throws.
+
+A handler is resolved by name against a `block_<handler>` config key, or one of the engine's
+built-in handlers if no config entry overrides it:
+
+```yaml
+config:
+  my-section:
+    block_playbook: "aux4 playbook execute {{file}} --loadActions browser"  # built-in default shown
+    block_shell: "bash {{file}}"
+```
+
+Built-in handlers:
+
+| Handler | Default command | Requires |
+|---------|------------------|----------|
+| `playbook` | `aux4 playbook execute {{file}} --loadActions browser` | [`aux4/playbook`](https://hub.aux4.io) and [`aux4/browser`](https://hub.aux4.io) installed |
+
+Example — actions in `execute:playbook`, assertions in `expect:playbook`:
+
+````markdown
+## should search and verify results
+
+```execute:playbook
+Go to https://example.com
+Search for "aux4"
+```
+
+```expect:playbook
+The page shows at least one search result for "aux4"
+```
+````
+
+Example — a custom handler configured via `block_<handler>`:
+
+````markdown
+```execute:node
+console.log("hello from a node script")
+```
+
+```expect
+hello from a node script
+```
+````
+
+```yaml
+config:
+  my-section:
+    block_node: "node {{file}}"
+```
+
+Run with `aux4 test run --config my-section --configFile config.yaml`.
+
+### Unknown Handlers and Typo'd Modifiers
+
+Any suffix on `expect:<suffix>` that isn't one of the known modifiers (`ignoreCase`, `partial`,
+`regex`, `json`, `ai`, `score`, `similar`) is treated as a handler name — there's no silent
+fallback. This means:
+
+- `expect:<handler>` with a handler that has no `block_<handler>` config entry and isn't a
+  built-in fails the test with a clear message: `Unknown execute handler '<handler>'. Define it
+  in config as block_<handler> ...`.
+- A typo of a known modifier — e.g. `expect:partail` instead of `expect:partial` — is **not**
+  silently ignored or silently treated as a passing modifier. It's resolved as a handler named
+  `partail`, which (almost always) isn't configured, so the test fails loudly with the same
+  "Unknown execute handler" message, naming the exact block that has the typo.
+- Two or more unrecognized suffix tokens (e.g. `expect:partail:ignorCase`) are rejected at parse
+  time with an "Ambiguous expect block" error listing the known modifiers, since the engine can't
+  tell which one (if any) was supposed to be a handler.
+- `execute:<handler>` has no modifiers to confuse it with — the suffix is always a handler name,
+  resolved the same way.
+
+### Safety Notes
+
+- Temp files are created with `fs.mkdtemp` (unique per call, never reused) and written with
+  owner-only permissions (`0600`), since block content may include data from `file:` fixtures or
+  config.
+- The temp file's path is shell-quoted before being substituted into the handler command, so
+  paths containing spaces (e.g. a `TMPDIR` with a space in it) still work correctly.
+- A missing or non-executable handler binary fails the step immediately with the shell's own
+  "command not found"-style error — it does not hang.
+
 ---
 
 ## Error Blocks (stderr) and Combined Output
@@ -1093,6 +1212,7 @@ The provided test files in this package demonstrate all primary features:
 - test/dataset-key.test.md — dataset with key field for labels
 - test/dataset-objects.test.md — dataset with object values
 - test/dataset-file-syntax.test.md — dataset:file shorthand syntax
+- test/custom-blocks.test.md — execute:<handler>/expect:<handler> custom block handlers, unknown-handler/typo errors, variable substitution, timeout precedence, temp file safety
 
 You can open each file to see complete, runnable test fragments. The README examples above copy the real tests so you can replicate them.
 

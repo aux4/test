@@ -269,6 +269,70 @@ function cleanup(tmpDir) {
   }
 }
 
+// Built-in handlers for `execute:<handler>` / `expect:<handler>` blocks. A config entry
+// `block_<handler>` overrides these, which is how a package (or a test's config.yaml)
+// registers its own handler without the engine needing to know about it ahead of time.
+const DEFAULT_BLOCK_HANDLERS = {
+  playbook: "aux4 playbook execute {{file}} --loadActions browser"
+};
+
+// Quote a path for safe interpolation into a shell command — handles spaces and any
+// shell metacharacters in the temp path (e.g. a single quote in the OS tmp dir name).
+function shellQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+// Self-heal: remove any `aux4-test-block-*` temp dirs left behind by a *previous* run.
+// Normal runs always clean up their own dir in the `finally` below. The one case that can
+// leak is a block whose command is still running when Jest's own per-test timeout fires —
+// Jest abandons the test and, once the suite ends, force-exits the process without waiting
+// for that orphaned async call to reach its `finally` (and without reliably running 'exit'
+// listeners either). Sweeping our own temp-dir prefix at the start of every run bounds any
+// such leak to "until the next run" instead of forever. Safe because mkdtemp names are
+// unique per run, so nothing here could belong to a run that's still in progress.
+(function sweepStaleBlockTmpDirs() {
+  try {
+    const tmpRoot = os.tmpdir();
+    for (const entry of fs.readdirSync(tmpRoot)) {
+      if (entry.startsWith("aux4-test-block-")) {
+        cleanup(path.join(tmpRoot, entry));
+      }
+    }
+  } catch (e) {
+    // ignore — best-effort housekeeping, never fail the test run over this
+  }
+})();
+
+// Resolve and run an `execute:<handler>` / `expect:<handler>` block: write its (already
+// variable-substituted) content to a fresh, uniquely-named, owner-only-readable temp file
+// and run the handler's command template over it. The temp file/dir is always removed
+// afterwards on success or failure; see sweepStaleBlockTmpDirs() above for the timeout case.
+async function runHandlerBlock(handler, content, params, directory) {
+  const template = (params && params["block_" + handler]) || DEFAULT_BLOCK_HANDLERS[handler];
+  if (!template) {
+    throw new Error(
+      `Unknown execute handler '${handler}'. Define it in config as block_${handler} (e.g. ` +
+      `"block_${handler}: your-command {{file}}"), or install/enable the package that provides it. ` +
+      `Built-in handlers: ${Object.keys(DEFAULT_BLOCK_HANDLERS).join(', ') || '(none)'}.`
+    );
+  }
+
+  // mkdtemp gives a unique, non-predictable directory per call, so parallel tests (and
+  // retries of the same test) never collide. The directory and file are created
+  // owner-only (0700/0600) since block content may include secrets or test data.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aux4-test-block-"));
+  const file = path.join(tmpDir, `${handler}.block`);
+  const fileContent = content.endsWith("\n") ? content : content + "\n";
+
+  try {
+    fs.writeFileSync(file, fileContent, { mode: 0o600 });
+    const command = template.replace(/\{\{\s*file\s*\}\}/g, shellQuote(file));
+    return await executeCommand(command, directory);
+  } finally {
+    cleanup(tmpDir);
+  }
+}
+
 function loadDataset(dataset, directory) {
   let data;
   if (dataset.file) {
@@ -472,7 +536,10 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
     (scenario.tests || []).forEach((test, testIndex) => {
       const testFunction = async () => {
         const startTime = Date.now();
-        const { stdout, stderr, exitCode } = await executeCommand(substituteVariables(test.execute, params), directory);
+        const substitutedExecute = substituteVariables(test.execute, params);
+        const { stdout, stderr, exitCode } = test.executeHandler
+          ? await runHandlerBlock(test.executeHandler, substitutedExecute, params, directory)
+          : await executeCommand(substitutedExecute, directory);
         const scores = [];
         let passed = true;
 
@@ -485,6 +552,47 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
 
         if (test.expects && test.expects.length > 0) {
           for (const expectObj of test.expects) {
+            // expect:<handler1>:<handler2> — ambiguous suffix caught at parse time
+            // (more than one token that isn't a known modifier). Fail loudly instead of
+            // silently picking one.
+            if (expectObj.expectHandlerError) {
+              passed = false;
+              expect(expectObj.expectHandlerError).toBe("");
+              continue;
+            }
+
+            // expect:<handler> — run the block through a handler and pass/fail on its
+            // exit code, rather than comparing it to stdout. Lets assertions live in an
+            // expect block while the execute block holds only the actions. An unknown
+            // handler (including a typo of a known modifier that didn't match
+            // KNOWN_EXPECT_MODIFIERS) fails here with a clear message naming the block
+            // and the handler, instead of silently passing or hanging.
+            if (expectObj.expectHandler) {
+              let assertResult;
+              try {
+                assertResult = await runHandlerBlock(
+                  expectObj.expectHandler,
+                  substituteVariables(expectObj.expect, params),
+                  params,
+                  directory
+                );
+              } catch (e) {
+                passed = false;
+                expect(`expect:${expectObj.expectHandler} failed: ${e.message}`).toBe("");
+                continue;
+              }
+              const handlerPassed = assertResult.exitCode === 0;
+              if (!handlerPassed) passed = false;
+              scores.push({ type: "handler:" + expectObj.expectHandler, passed: handlerPassed });
+              expect(
+                handlerPassed
+                  ? ""
+                  : `${assertResult.stdout || ""}${assertResult.stderr || ""}`.trim() ||
+                      `handler '${expectObj.expectHandler}' exited ${assertResult.exitCode}`
+              ).toBe("");
+              continue;
+            }
+
             // expect:ai:score — LLM scoring
             if (expectObj.expectScore && expectObj.expectAi) {
               const scoreResult = await validateWithScore(stdout, expectObj.scoreEval, expectObj.scoreRange);
@@ -679,7 +787,27 @@ function createScenarioBody(index, scenario, directory, prefix, params) {
 
       const hasAi = (test.expects || []).some(e => e.expectAi) || (test.errors || []).some(e => e.errorAi);
       const hasScore = (test.expects || []).some(e => e.expectScore);
-      const timeout = test.timeout || scenario.timeout || (hasAi || hasScore ? AI_TIMEOUT : undefined);
+
+      // Timeout precedence, most specific first:
+      //   1. a `timeout` block on this test
+      //   2. a `timeout` block in this scenario
+      //   3. config `block_<handler>_timeout` — per-handler default (e.g. browser steps
+      //      need longer than the default), applies to the test's execute handler
+      //   4. config `timeout` — file-wide default
+      //   5. the AI default, when an AI/score expectation is present
+      // A `timeout` block only covers the test that follows it, and headings start a new
+      // scenario, so without 3/4 every handler-driven test would have to restate its own
+      // timeout block.
+      const handlerTimeout = test.executeHandler && params
+        ? parseInt(params["block_" + test.executeHandler + "_timeout"], 10)
+        : NaN;
+      const configTimeout = params ? parseInt(params["timeout"], 10) : NaN;
+      const timeout =
+        test.timeout ||
+        scenario.timeout ||
+        (!isNaN(handlerTimeout) ? handlerTimeout : undefined) ||
+        (!isNaN(configTimeout) ? configTimeout : undefined) ||
+        (hasAi || hasScore ? AI_TIMEOUT : undefined);
 
       if (timeout) {
         it(`${test.title || `${testIndex + 1}. should print output`}`, testFunction, timeout);
