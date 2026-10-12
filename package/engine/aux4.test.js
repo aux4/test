@@ -282,20 +282,36 @@ function shellQuote(value) {
   return "'" + String(value).replace(/'/g, "'\\''") + "'";
 }
 
-// Self-heal: remove any `aux4-test-block-*` temp dirs left behind by a *previous* run.
-// Normal runs always clean up their own dir in the `finally` below. The one case that can
-// leak is a block whose command is still running when Jest's own per-test timeout fires —
-// Jest abandons the test and, once the suite ends, force-exits the process without waiting
-// for that orphaned async call to reach its `finally` (and without reliably running 'exit'
-// listeners either). Sweeping our own temp-dir prefix at the start of every run bounds any
-// such leak to "until the next run" instead of forever. Safe because mkdtemp names are
-// unique per run, so nothing here could belong to a run that's still in progress.
+// Self-heal: remove `aux4-test-block-*` temp dirs that are old enough to be orphans from a
+// *previous, already-finished* run. Normal runs always clean up their own dir in the
+// `finally` below. The one case that can leak is a block whose command is still running
+// when Jest's own per-test timeout fires — Jest abandons the test and, once the suite ends,
+// force-exits the process without waiting for that orphaned async call to reach its
+// `finally` (and without reliably running 'exit' listeners either). Sweeping bounds such a
+// leak to "until it's stale" instead of forever.
+//
+// This must NOT be a blanket sweep of every `aux4-test-block-*` dir: multiple `aux4 test
+// run` processes can be in flight at the same time (e.g. two CI jobs, or a developer running
+// tests in two terminals), each with its own live temp dirs created moments ago — deleting
+// those out from under a concurrent, still-running handler would corrupt that other run.
+// Only dirs older than STALE_BLOCK_TMP_DIR_AGE_MS (by mtime) are removed, which is long
+// enough that no normal handler run is still using them, but short enough to clean up after
+// a crash/timeout promptly.
+const STALE_BLOCK_TMP_DIR_AGE_MS = 60 * 60 * 1000; // 1 hour
 (function sweepStaleBlockTmpDirs() {
   try {
     const tmpRoot = os.tmpdir();
+    const now = Date.now();
     for (const entry of fs.readdirSync(tmpRoot)) {
-      if (entry.startsWith("aux4-test-block-")) {
-        cleanup(path.join(tmpRoot, entry));
+      if (!entry.startsWith("aux4-test-block-")) continue;
+      const fullPath = path.join(tmpRoot, entry);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (now - stat.mtimeMs > STALE_BLOCK_TMP_DIR_AGE_MS) {
+          cleanup(fullPath);
+        }
+      } catch (e) {
+        // ignore — dir may have been removed concurrently, or be inaccessible
       }
     }
   } catch (e) {

@@ -291,11 +291,49 @@ config:
 ```
 
 ```execute
-aux4 test run fixtures/cleanup.test.md --config blocks --configFile fixtures/cleanup-config.yaml >/dev/null 2>&1; find "${TMPDIR:-/tmp}" -maxdepth 1 -name "aux4-test-block-*" 2>/dev/null | wc -l | tr -d ' '
+BEFORE=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name "aux4-test-block-*" 2>/dev/null | wc -l | tr -d ' '); aux4 test run fixtures/cleanup.test.md --config blocks --configFile fixtures/cleanup-config.yaml >/dev/null 2>&1; AFTER=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name "aux4-test-block-*" 2>/dev/null | wc -l | tr -d ' '); echo $((AFTER - BEFORE))
 ```
 
 ```expect
 0
+```
+
+## the startup sweep only removes stale temp dirs, never fresh ones
+
+The sweep that cleans up leaked temp dirs from a previous, already-finished run must not touch
+a dir that was just created — e.g. by another `aux4 test run` process still in flight — or it
+would corrupt that concurrent run. It only removes `aux4-test-block-*` dirs whose mtime is older
+than its staleness threshold.
+
+````file:fixtures/sweep-trivial.test.md
+# Fixture
+
+## case
+
+```execute
+echo ok
+```
+
+```expect
+ok
+```
+````
+
+```beforeAll
+mkdir -p "${TMPDIR:-/tmp}/aux4-test-block-stale-fixture" "${TMPDIR:-/tmp}/aux4-test-block-fresh-fixture"
+touch -t "$(date -v-2H +%Y%m%d%H%M 2>/dev/null || date -d '2 hours ago' +%Y%m%d%H%M)" "${TMPDIR:-/tmp}/aux4-test-block-stale-fixture" 2>/dev/null || touch -d "2 hours ago" "${TMPDIR:-/tmp}/aux4-test-block-stale-fixture"
+```
+
+```afterAll
+rm -rf "${TMPDIR:-/tmp}/aux4-test-block-stale-fixture" "${TMPDIR:-/tmp}/aux4-test-block-fresh-fixture"
+```
+
+```execute
+aux4 test run fixtures/sweep-trivial.test.md >/dev/null 2>&1; echo "stale=$([ -d "${TMPDIR:-/tmp}/aux4-test-block-stale-fixture" ] && echo present || echo gone) fresh=$([ -d "${TMPDIR:-/tmp}/aux4-test-block-fresh-fixture" ] && echo present || echo gone)"
+```
+
+```expect
+stale=gone fresh=present
 ```
 
 ## timeout precedence: a test-level timeout block wins over a shorter block_<handler>_timeout

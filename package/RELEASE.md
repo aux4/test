@@ -1,6 +1,6 @@
 # Release notes
 
-## 0.3.0
+## 0.2.25
 
 Add custom block handlers: `execute:<handler>` and `expect:<handler>` write a block's content to
 a secure temp file and run it through a configured `block_<handler>` command (falling back to a
