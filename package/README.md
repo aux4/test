@@ -22,6 +22,14 @@ This package requires system dependencies. You need to have one of the following
 
 For more details, see [system-installer](/r/public/packages/aux4/pkger/commands/aux4/pkger/system).
 
+## Windows
+
+Test commands are shell commands: on Windows they run with Git Bash, as aux4 itself does — install
+[Git for Windows](https://git-scm.com/download/win). `SHELL` is used when it points to a `bash.exe`.
+Output lines ending in CRLF (as Windows programs print them) are compared as LF, so the same `.test.md`
+files pass on Windows, macOS and Linux. Jest runs from a global install (`npm install -g jest`) or, when
+there is none, from the copy that ships with the package.
+
 ## Quick Start
 
 Run the test runner in the current directory:

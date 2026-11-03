@@ -1,7 +1,6 @@
 name: CI
 
-# Runs the package's own .test.md suite (the core group) with aux4 built from the aux4/aux4 dev branch,
-# on Linux, macOS, Windows Server (amd64) and Windows 11 (arm64). The Windows jobs use no workarounds:
+# Runs the package's own .test.md suite (the core group) on Linux, macOS, Windows Server (amd64) and Windows 11 (arm64). The Windows jobs use no workarounds:
 # no SHELL/ComSpec overrides, test files checked out with CRLF (runner default core.autocrlf=true).
 # windows-latest uses a global jest (`npm install -g jest`, the documented system dependency);
 # windows-11-arm has none, so it runs the jest bundled in the package (its arm64 native module).
@@ -13,8 +12,11 @@ on:
       - dev
   workflow_call:
 
+# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh), from the
+# dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub) until aux4 and pkger with
+# Windows support are promoted; then INSTALL_PREFIX can be emptied to use the prod ones.
 env:
-  AUX4_CORE_REF: dev
+  INSTALL_PREFIX: 'dev.'
 
 jobs:
   test:
@@ -35,31 +37,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Checkout aux4
-        uses: actions/checkout@v6
-        with:
-          repository: aux4/aux4
-          ref: ${{ env.AUX4_CORE_REF }}
-          path: .aux4-core
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.25'
-          cache-dependency-path: .aux4-core/go.sum
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Build aux4
+      - name: Install aux4 and pkger
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/bin"
-          (cd .aux4-core && go build -o "$RUNNER_TEMP/bin/aux4$([ "$RUNNER_OS" = Windows ] && echo .exe)" .)
-          rm -rf .aux4-core
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          curl -fsSL "https://${INSTALL_PREFIX}aux4.sh" | sh
+          BIN="$HOME/.aux4.config/packages/aux4/aux4"
+          export PATH="$BIN:$PATH"
+          if [ "$RUNNER_OS" = Windows ]; then cygpath -w "$BIN" >> "$GITHUB_PATH"; else echo "$BIN" >> "$GITHUB_PATH"; fi
+          curl -fsSL "https://${INSTALL_PREFIX}pkger.aux4.sh" | sh
+          aux4 aux4 pkger install aux4/config
+          aux4 aux4 version
 
       - name: Install dependencies and build
         shell: bash
