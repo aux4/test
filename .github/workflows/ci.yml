@@ -12,11 +12,11 @@ on:
       - dev
   workflow_call:
 
-# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh), from the
-# dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub) until aux4 and pkger with
-# Windows support are promoted; then INSTALL_PREFIX can be emptied to use the prod ones.
+# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh). The dev
+# branch uses the dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub); every other
+# branch/PR uses the prod installers, now that aux4 and pkger with Windows support are live in prod.
 env:
-  INSTALL_PREFIX: 'dev.'
+  INSTALL_PREFIX: ${{ github.ref_name == 'dev' && 'dev.' || '' }}
 
 jobs:
   test:
