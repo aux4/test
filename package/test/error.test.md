@@ -4,6 +4,6 @@
 wrong command
 ```
 
-```error
-/bin/sh: wrong: command not found
+```error:regex
+^\S+: (line 1: |1: )?wrong: (command )?not found$
 ```

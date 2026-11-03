@@ -332,8 +332,8 @@ try {
 const fileList = files.split(",").filter(f => f.trim());
 
 for (const file of fileList) {
-  const fileName = file.split("/").pop();
-  const directory = file.substring(0, file.lastIndexOf("/"));
+  const fileName = path.basename(file);
+  const directory = path.dirname(file);
 
   try {
     const scenarios = MarkdownTestParser.parse(file);

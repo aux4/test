@@ -1,0 +1,72 @@
+name: CI
+
+# Runs the package's own .test.md suite (the core group) on Linux, macOS, Windows Server (amd64) and Windows 11 (arm64). The Windows jobs use no workarounds:
+# no SHELL/ComSpec overrides, test files checked out with CRLF (runner default core.autocrlf=true).
+# windows-latest uses a global jest (`npm install -g jest`, the documented system dependency);
+# windows-11-arm has none, so it runs the jest bundled in the package (its arm64 native module).
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+      - dev
+  workflow_call:
+
+# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh), from the
+# dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub) until aux4 and pkger with
+# Windows support are promoted; then INSTALL_PREFIX can be emptied to use the prod ones.
+env:
+  INSTALL_PREFIX: 'dev.'
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            globalJest: true
+          - os: macos-latest
+            globalJest: true
+          - os: windows-latest
+            globalJest: true
+          - os: windows-11-arm
+            globalJest: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install aux4 and pkger
+        shell: bash
+        run: |
+          curl -fsSL "https://${INSTALL_PREFIX}aux4.sh" | sh
+          BIN="$HOME/.aux4.config/packages/aux4/aux4"
+          export PATH="$BIN:$PATH"
+          if [ "$RUNNER_OS" = Windows ]; then cygpath -w "$BIN" >> "$GITHUB_PATH"; else echo "$BIN" >> "$GITHUB_PATH"; fi
+          curl -fsSL "https://${INSTALL_PREFIX}pkger.aux4.sh" | sh
+          aux4 aux4 pkger install aux4/config
+          aux4 aux4 version
+
+      - name: Install dependencies and build
+        shell: bash
+        run: |
+          npm install
+          npx vite build
+          npm install --prefix package/engine
+          npm install colors strip-color marked --prefix package/engine
+          npm install --no-save --force --prefix package/engine $(node -p "const p=require('./package/engine/node_modules/unrs-resolver/package.json');Object.entries(p.optionalDependencies).filter(([n])=>/-(darwin-(x64|arm64)|linux-(x64|arm64)-gnu|win32-(x64|arm64)-msvc)$/.test(n)).map(([n,v])=>n+'@'+v).join(' ')")
+          ls package/engine/node_modules/@unrs/
+
+      - name: Global jest
+        if: matrix.globalJest
+        run: npm install -g jest
+
+      - name: Tests
+        working-directory: package
+        run: aux4 test run --group core test

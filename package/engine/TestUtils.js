@@ -16,12 +16,71 @@ class ExecutorError extends Error {
   }
 }
 
+const isWindows = process.platform === "win32";
+
+let windowsShell;
+
+// Test command lines are POSIX shell. child_process.exec runs them with cmd.exe on Windows, so use
+// bash there instead: $SHELL when it is a bash that exists, otherwise Git for Windows' bash (found
+// next to git.exe on PATH or in its default install location).
+function findWindowsShell() {
+  if (windowsShell !== undefined) {
+    return windowsShell;
+  }
+  const isFile = file => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const candidates = [];
+  const shell = process.env.SHELL;
+  if (shell && /bash(\.exe)?$/i.test(shell) && !shell.startsWith("/")) {
+    candidates.push(shell, `${shell}.exe`);
+  }
+  const dirs = (process.env.PATH || process.env.Path || "").split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    if (isFile(path.join(dir, "git.exe"))) {
+      for (const root of [path.dirname(dir), path.dirname(path.dirname(dir))]) {
+        candidates.push(path.join(root, "bin", "bash.exe"), path.join(root, "usr", "bin", "bash.exe"));
+      }
+    }
+  }
+  for (const env of ["ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"]) {
+    if (process.env[env]) {
+      candidates.push(path.join(process.env[env], "Git", "bin", "bash.exe"));
+    }
+  }
+  if (process.env.LOCALAPPDATA) {
+    candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "Git", "bin", "bash.exe"));
+  }
+  windowsShell = candidates.find(isFile) || null;
+  return windowsShell;
+}
+
+function shellOptions() {
+  if (!isWindows) {
+    return {};
+  }
+  const shell = findWindowsShell();
+  if (!shell) {
+    throw new Error("aux4/test runs test commands with bash, and no bash was found: install Git for Windows (https://git-scm.com/download/win)");
+  }
+  return { shell };
+}
+
+// Windows programs end lines with CRLF; expectations in .test.md files use LF.
+function normalizeNewlines(text) {
+  return isWindows && typeof text === "string" ? text.replace(/\r\n/g, "\n") : text;
+}
+
 function runCliCommand(command, options = {}) {
   return new Promise((resolve, reject) => {
     const out = {};
     const child = childProcess.exec(
       command,
-      { maxBuffer: Infinity, ...options, env: { ...process.env } },
+      { maxBuffer: Infinity, ...shellOptions(), ...options, env: { ...process.env } },
       (err, stdout, stderr) => {
         if (err) {
           reject(new ExecutorError(err.message, err, out.exitCode, stdout, stderr));
@@ -71,6 +130,9 @@ async function executeCommand(command, directory) {
       throw err;
     }
   }
+
+  stdout = normalizeNewlines(stdout);
+  stderr = normalizeNewlines(stderr);
 
   if (stdout && stdout.endsWith("\n")) {
     stdout = stripColor(stdout.slice(0, -1) || "");
