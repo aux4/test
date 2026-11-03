@@ -1,0 +1,80 @@
+name: CI
+
+# Runs the package's own .test.md suite (the core group) with aux4 built from the aux4/aux4 dev branch,
+# on Linux, macOS, Windows Server (amd64) and Windows 11 (arm64). The Windows jobs use no workarounds:
+# no SHELL/ComSpec overrides, test files checked out with CRLF (runner default core.autocrlf=true).
+# windows-latest uses a global jest (`npm install -g jest`, the documented system dependency);
+# windows-11-arm has none, so it runs the jest bundled in the package (its arm64 native module).
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+      - dev
+  workflow_call:
+
+env:
+  AUX4_CORE_REF: dev
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            globalJest: true
+          - os: macos-latest
+            globalJest: true
+          - os: windows-latest
+            globalJest: true
+          - os: windows-11-arm
+            globalJest: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Checkout aux4
+        uses: actions/checkout@v6
+        with:
+          repository: aux4/aux4
+          ref: ${{ env.AUX4_CORE_REF }}
+          path: .aux4-core
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache-dependency-path: .aux4-core/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build aux4
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          (cd .aux4-core && go build -o "$RUNNER_TEMP/bin/aux4$([ "$RUNNER_OS" = Windows ] && echo .exe)" .)
+          rm -rf .aux4-core
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies and build
+        shell: bash
+        run: |
+          npm install
+          npx vite build
+          npm install --prefix package/engine
+          npm install colors strip-color marked --prefix package/engine
+          npm install --no-save --force --prefix package/engine $(node -p "const p=require('./package/engine/node_modules/unrs-resolver/package.json');Object.entries(p.optionalDependencies).filter(([n])=>/-(darwin-(x64|arm64)|linux-(x64|arm64)-gnu|win32-(x64|arm64)-msvc)$/.test(n)).map(([n,v])=>n+'@'+v).join(' ')")
+          ls package/engine/node_modules/@unrs/
+
+      - name: Global jest
+        if: matrix.globalJest
+        run: npm install -g jest
+
+      - name: Tests
+        working-directory: package
+        run: aux4 test run --group core test
