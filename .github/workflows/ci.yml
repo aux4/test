@@ -2,7 +2,9 @@ name: CI
 
 # Runs the package's own .test.md suite (the core group) on Linux, macOS, Windows Server (amd64) and Windows 11 (arm64). The Windows jobs use no workarounds:
 # no SHELL/ComSpec overrides, test files checked out with CRLF (runner default core.autocrlf=true).
-# windows-latest uses a global jest (`npm install -g jest`, the documented system dependency);
+# windows-latest resolves a global jest the same way a real user would, via
+# `aux4 aux4 pkger install aux4/system-installer-npm aux4/test` (pkger 1.1.51+ processes a multi-package
+# install in order, so the npm installer listed first is available to aux4/test's system dependency check);
 # windows-11-arm has none, so it runs the jest bundled in the package (its arm64 native module).
 on:
   pull_request:
@@ -12,11 +14,11 @@ on:
       - dev
   workflow_call:
 
-# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh), from the
-# dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub) until aux4 and pkger with
-# Windows support are promoted; then INSTALL_PREFIX can be emptied to use the prod ones.
+# aux4 and pkger are installed with the documented installers (curl https://aux4.sh | sh). The dev
+# branch uses the dev channel (dev.aux4.sh / dev.pkger.aux4.sh install from the dev hub); every other
+# branch/PR uses the prod installers, now that aux4 and pkger with Windows support are live in prod.
 env:
-  INSTALL_PREFIX: 'dev.'
+  INSTALL_PREFIX: ${{ github.ref_name == 'dev' && 'dev.' || '' }}
 
 jobs:
   test:
@@ -63,9 +65,9 @@ jobs:
           npm install --no-save --force --prefix package/engine $(node -p "const p=require('./package/engine/node_modules/unrs-resolver/package.json');Object.entries(p.optionalDependencies).filter(([n])=>/-(darwin-(x64|arm64)|linux-(x64|arm64)-gnu|win32-(x64|arm64)-msvc)$/.test(n)).map(([n,v])=>n+'@'+v).join(' ')")
           ls package/engine/node_modules/@unrs/
 
-      - name: Global jest
+      - name: Install jest via aux4/test system dependency
         if: matrix.globalJest
-        run: npm install -g jest
+        run: aux4 aux4 pkger install aux4/system-installer-npm aux4/test
 
       - name: Tests
         working-directory: package
